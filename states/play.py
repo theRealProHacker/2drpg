@@ -36,14 +36,17 @@ richtungen = [
 
 class PlayState(State):
     def __init__(self):
+        # text
         self.text: pg.Surface = font.render("Play", True, "black")
-        
         self.col_text: pg.Surface = font.render("Collision", True, "black")
         self.ncol_text: pg.Surface = font.render("No Collision", True, "black")
-        self.spritesheet = spritesheet("assets/Ocean_SpriteSheet.png")
-
+        
+        # Weltgröße
+        self.world_size = pg.Vector2(4000, 4000)
+        
         # load insel
         self.insel = pg.image.load("assets/Insel.png")
+        self.insel = pg.transform.scale2x(self.insel)
         self.insel = pg.transform.scale2x(self.insel)
         self.insel = pg.transform.scale2x(self.insel)
         self.mask_insel=pg.mask.from_surface(surface=self.insel)
@@ -63,6 +66,12 @@ class PlayState(State):
         self.schiff_richtung = 0
         self.moving = False
         self.clock = pg.time.Clock()
+
+        # Ozean
+        self.spritesheet = spritesheet("assets/Ocean_SpriteSheet.png")
+        self.tiles = self.spritesheet.images_at(
+            [pg.Rect(i * 64, 0, 64, 64) for i in range(4)]
+        )
         # [
         #     pg.Rect(0,0,64,64),
         #     pg.Rect(64,0,64,64),
@@ -70,9 +79,20 @@ class PlayState(State):
         #     pg.Rect(192,0,64,64),
         # ]
 
-        self.tiles = self.spritesheet.images_at(
-            [pg.Rect(i * 64, 0, 64, 64) for i in range(4)]
-        )
+        # Steine
+        self.rock_img = pg.image.load("assets/Stein.png").convert_alpha()
+        self.rock_img = pg.transform.scale_by(self.rock_img, 0.5)
+        self.rock_mask = pg.mask.from_surface(self.rock_img)
+    
+        # camera
+        self.camera_pos = pg.Vector2(self.cords_schiff1)
+        self.zoom = 1.0
+        self.base_zoom = 1.0
+        self.move_zoom = 1.1
+        self.zoom_speed = 5.0
+        self.cam_lerp = 8.0
+
+
     # def collide(self, other):
     #     ...
         
@@ -124,7 +144,14 @@ class PlayState(State):
         # if new collision area is greater than old collision area, undo movement
         if new_collision_area > old_collision_area:
             self.cords_schiff1 = old_cords
-            
+        
+        # camera follows ship (smooth)
+        self.camera_pos += (self.cords_schiff1 - self.camera_pos) * min(1, dt * self.cam_lerp)
+
+        # zoom logic
+        target_zoom = self.move_zoom if self.moving else self.base_zoom
+        self.zoom += (target_zoom - self.zoom) * min(1, dt * self.zoom_speed)
+
         
 
     def draw(self, s):
@@ -132,22 +159,37 @@ class PlayState(State):
         Whatever you want to draw
         s is the surface or screen you may draw to
         """
-        # w,h = pg.display.get_window_size()
+        w,h = pg.display.get_window_size()
         # rect = self.text.get_rect(center = (w//2, h//2))
 
-        # s.blit(self.text, rect)
+        w, h = s.get_size()
+        camera_surface = pg.Surface((w, h), pg.SRCALPHA)
 
-        # Ozean
+        sx, sy = self.schiff_rect.center
+
+        # ocean
         tile = int(time() * 2)
-
         for i in range(25):
             for j in range(20):
-                s.blit(self.tiles[(tile + i) % 4], (64 * i, 64 * j))
+                pos = pg.Vector2(64 * i, 64 * j) - (sx % 64, sy%64)
+                camera_surface.blit(self.tiles[(tile + i) % 4], pos)
 
-        # Insel
-        s.blit(self.insel, (0, 0))
-        
-        # schiff1
-        s.blit(self.schiff, self.schiff_rect)
+        # island
+        insel_pos = pg.Vector2(0, 0) - self.camera_pos + pg.Vector2(w // 2, h // 2)
+        camera_surface.blit(self.insel, insel_pos)
+
+        # ship
+        ship_pos = self.schiff_rect.topleft - self.camera_pos + pg.Vector2(w // 2, h // 2)
+        camera_surface.blit(self.schiff, ship_pos)
+
+        # zoom
+        scaled = pg.transform.smoothscale(
+            camera_surface,
+            (int(w * self.zoom), int(h * self.zoom))
+        )
+
+        zoom_rect = scaled.get_rect(center=(w // 2, h // 2))
+        s.blit(scaled, zoom_rect)
+
 
     

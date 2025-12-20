@@ -6,6 +6,7 @@ from StateManager import StateManager
 
 from states.play import PlayState
 from states.pause import PauseState
+from circle_collision import CircleCollisionState
 
 pg.display.set_caption("Pirates")
 screen = pg.display.set_mode((960, 540), pg.RESIZABLE)
