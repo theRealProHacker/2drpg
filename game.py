@@ -6,12 +6,13 @@ from StateManager import StateManager
 
 from states.play import PlayState
 from states.pause import PauseState
+from states.menu import MenuState
 from circle_collision import CircleCollisionState
 
 pg.display.set_caption("Pirates")
 screen = pg.display.set_mode((960, 540), pg.RESIZABLE)
 
-sm = StateManager({"play": PlayState(), "pause": PauseState(),}, start="play")
+sm = StateManager({"play": PlayState(), "pause": PauseState(), "menu": MenuState()}, start="menu")
 
 clock = pg.time.Clock()
 
