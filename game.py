@@ -1,3 +1,11 @@
+import sys
+import os
+
+# When running as a PyInstaller exe, change to the exe's directory
+# so relative paths (assets/, gems_save.json) still work.
+if getattr(sys, 'frozen', False):
+    os.chdir(os.path.dirname(sys.executable))
+
 import pygame as pg
 
 pg.init()
@@ -7,12 +15,13 @@ from StateManager import StateManager
 from states.play import PlayState
 from states.pause import PauseState
 from states.menu import MenuState
+from states.profile import ProfileState
 from circle_collision import CircleCollisionState
 
 pg.display.set_caption("Pirates")
 screen = pg.display.set_mode((960, 540), pg.RESIZABLE)
 
-sm = StateManager({"play": PlayState(), "pause": PauseState(), "menu": MenuState()}, start="menu")
+sm = StateManager({"play": PlayState(), "pause": PauseState(), "menu": MenuState(), "profile": ProfileState()}, start="menu")
 
 clock = pg.time.Clock()
 

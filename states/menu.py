@@ -3,9 +3,11 @@ import math
 import random
 import os
 import json
+import traceback
 from datetime import date
 from StateManager import State
 from sounds import get_sound_manager
+from states.pause import PIRATE_FAREWELL_LINES
 
 # Gem-Datei für Anzeige im Menü
 GEM_SAVE_FILE = "gems_save.json"
@@ -14,40 +16,40 @@ GEM_SAVE_FILE = "gems_save.json"
 PERKS = [
     {
         "id": "hull",
-        "name": "Verstärkter Rumpf",
-        "description": "+20 Max HP pro Level",
+        "name": "Reinforced Hull",
+        "description": "+20 Max HP per Level",
         "icon_color": (200, 50, 50),
         "max_level": 5,
         "cost_per_level": [5, 12, 22, 35, 55],
     },
     {
         "id": "cannons",
-        "name": "Bessere Kanonen",
-        "description": "+10 Schaden pro Level",
+        "name": "Better Cannons",
+        "description": "+10 Damage per Level",
         "icon_color": (255, 150, 50),
         "max_level": 5,
         "cost_per_level": [5, 12, 22, 35, 55],
     },
     {
         "id": "sails",
-        "name": "Schnellere Segel",
-        "description": "+10% Geschwindigkeit pro Level",
+        "name": "Faster Sails",
+        "description": "+10% Speed per Level",
         "icon_color": (50, 200, 100),
         "max_level": 5,
         "cost_per_level": [5, 10, 18, 28, 45],
     },
     {
         "id": "repair",
-        "name": "Auto-Reparatur",
-        "description": "+1 HP/s Regeneration pro Level",
+        "name": "Auto-Repair",
+        "description": "+1 HP/s Regen per Level",
         "icon_color": (50, 150, 255),
         "max_level": 5,
         "cost_per_level": [8, 15, 25, 40, 65],
     },
     {
         "id": "reload",
-        "name": "Schnelles Nachladen",
-        "description": "-10% Schuss-Cooldown pro Level",
+        "name": "Fast Reload",
+        "description": "-10% Shot Cooldown per Level",
         "icon_color": (200, 200, 50),
         "max_level": 5,
         "cost_per_level": [6, 14, 24, 38, 55],
@@ -55,7 +57,7 @@ PERKS = [
     {
         "id": "xp_boost",
         "name": "XP-Boost",
-        "description": "+15% mehr XP pro Level",
+        "description": "+15% more XP per Level",
         "icon_color": (180, 100, 255),
         "max_level": 5,
         "cost_per_level": [6, 14, 24, 38, 55],
@@ -196,6 +198,33 @@ def save_settings(settings):
         json.dump(data, f)
 
 
+def reset_all_progress():
+    """Setzt den gesamten Fortschritt zurück (behält nur Einstellungen)"""
+    data = load_full_save()
+    settings = data.get('settings', dict(DEFAULT_SETTINGS))
+    # Alles löschen und nur Einstellungen behalten
+    new_data = {
+        'gems': 0,
+        'perks': {},
+        'highscore': {'survival_time': 0, 'kills': 0, 'level': 1, 'gems': 0},
+        'profile': {
+            'profile_xp': 0,
+            'profile_level': 1,
+            'talent_points': 0,
+            'total_kills': 0,
+            'total_playtime': 0,
+            'games_played': 0,
+            'talents': {},
+        },
+        'settings': settings,
+        'free_spins': 0,
+        'xp_booster_minutes': 0,
+        'streak_count': 0,
+    }
+    with open(GEM_SAVE_FILE, 'w') as f:
+        json.dump(new_data, f)
+
+
 # ==================== LOGIN-STREAK BELOHNUNGEN ====================
 # 7-Tage-Zyklus, wiederholt sich
 STREAK_REWARDS = [
@@ -270,7 +299,7 @@ class MenuState(State):
         self.font_perk_desc = pg.font.SysFont("Arial", 18)
         
         # Menu items
-        self.menu_items = ["Spiel Starten", "Perks", "Einstellungen", "Beenden"]
+        self.menu_items = ["Start Game", "Profile", "Perks", "Settings", "Quit"]
         
         # Perk-Shop State
         self.in_perk_shop = False
@@ -300,6 +329,17 @@ class MenuState(State):
         self.settings_selected = 0  # 0 = Musik, 1 = Sound
         self.settings_data = load_settings()
         self.settings_dragging = None  # Welcher Slider gerade gezogen wird
+        self.reset_confirm = False  # Bestätigungs-Dialog für Progress-Reset
+        self.reset_flash_timer = 0  # Flash-Animation nach Reset
+        
+        # Pirate farewell state
+        self.show_pirate_farewell = False
+        self.farewell_timer = 0.0
+        self.farewell_text = ""
+        self.farewell_btn_selected = 0  # 0=Stay, 1=Leave
+        self.farewell_mouse_hover = -1
+        self._farewell_btn_rects: list[pg.Rect] = []
+        self.font_speech = pg.font.SysFont("Arial", 18, bold=True)
         
         self.perk_selected = 0
         self.perk_buy_flash = {}  # perk_id -> timer für Kauf-Animation
@@ -364,6 +404,8 @@ class MenuState(State):
                 del self.perk_buy_flash[perk_id]
         if self.perk_error_flash > 0:
             self.perk_error_flash -= dt_seconds
+        if self.reset_flash_timer > 0:
+            self.reset_flash_timer -= dt_seconds
         
         # Streak-Popup Timer
         if self.show_streak_popup:
@@ -402,11 +444,17 @@ class MenuState(State):
         if self.wheel_flash_timer > 0:
             self.wheel_flash_timer -= dt_seconds
         
+        # Pirate farewell timer
+        if self.show_pirate_farewell:
+            self.farewell_timer += dt_seconds
+
         # Input
         w, h = pg.display.get_window_size()
         for event in events:
             if event.type == pg.KEYDOWN:
-                if self.show_streak_popup:
+                if self.show_pirate_farewell:
+                    self._handle_farewell_input(event)
+                elif self.show_streak_popup:
                     if event.key in (pg.K_RETURN, pg.K_SPACE, pg.K_ESCAPE):
                         self.show_streak_popup = False
                 elif self.in_settings:
@@ -419,7 +467,13 @@ class MenuState(State):
                     self._handle_menu_input(event)
             elif event.type == pg.MOUSEMOTION:
                 mx, my = event.pos
-                if self.show_streak_popup:
+                if self.show_pirate_farewell:
+                    self.farewell_mouse_hover = -1
+                    for i, rect in enumerate(self._farewell_btn_rects):
+                        if rect.collidepoint(mx, my):
+                            self.farewell_mouse_hover = i
+                            self.farewell_btn_selected = i
+                elif self.show_streak_popup:
                     pass
                 elif self.in_settings:
                     self._handle_settings_mouse_drag(mx, my, w, h)
@@ -431,7 +485,12 @@ class MenuState(State):
                     self._handle_menu_mouse_hover(mx, my, w, h)
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
-                if self.show_streak_popup:
+                if self.show_pirate_farewell:
+                    if self.farewell_mouse_hover == 0:
+                        self.show_pirate_farewell = False
+                    elif self.farewell_mouse_hover == 1:
+                        self._do_actual_quit()
+                elif self.show_streak_popup:
                     self.show_streak_popup = False
                 elif self.in_settings:
                     self._handle_settings_click(mx, my, w, h)
@@ -449,7 +508,37 @@ class MenuState(State):
             elif event.type == pg.MOUSEBUTTONUP and event.button == 1:
                 if self.in_settings:
                     self.settings_dragging = None
-    
+
+    def _trigger_quit(self):
+        """Show pirate farewell instead of quitting immediately"""
+        self.show_pirate_farewell = True
+        self.farewell_timer = 0.0
+        self.farewell_text = random.choice(PIRATE_FAREWELL_LINES)
+        self.farewell_btn_selected = 0
+        self.farewell_mouse_hover = -1
+        self._farewell_btn_rects = []
+
+    def _do_actual_quit(self):
+        """Actually quit the game"""
+        pg.quit()
+        exit()
+
+    def _handle_farewell_input(self, event):
+        """Handle keyboard input for the pirate farewell screen"""
+        if event.key == pg.K_ESCAPE:
+            self.show_pirate_farewell = False
+        elif event.key == pg.K_LEFT or event.key == pg.K_a:
+            self.farewell_btn_selected = 0
+        elif event.key == pg.K_RIGHT or event.key == pg.K_d:
+            self.farewell_btn_selected = 1
+        elif event.key == pg.K_RETURN or event.key == pg.K_SPACE:
+            if self.farewell_btn_selected == 0:
+                self.show_pirate_farewell = False
+            else:
+                self._do_actual_quit()
+        elif event.key == pg.K_q:
+            self._do_actual_quit()
+
     def _handle_menu_input(self, event):
         if event.key == pg.K_UP or event.key == pg.K_w:
             self.selected = (self.selected - 1) % len(self.menu_items)
@@ -467,17 +556,19 @@ class MenuState(State):
                     self.sfx.stop_menu_music()
                 self.exit("play")
             elif self.selected == 1:
+                if hasattr(self, 'sfx'):
+                    self.sfx.stop_menu_music()
+                self.exit("profile")
+            elif self.selected == 2:
                 self.in_perk_shop = True
                 self.perk_selected = 0
-            elif self.selected == 2:
+            elif self.selected == 3:
                 self.in_settings = True
                 self.settings_selected = 0
-            elif self.selected == 3:
-                pg.quit()
-                exit()
+            elif self.selected == 4:
+                self._trigger_quit()
         elif event.key == pg.K_ESCAPE:
-            pg.quit()
-            exit()
+            self._trigger_quit()
     
     def _handle_perk_shop_input(self, event):
         if event.key == pg.K_ESCAPE or event.key == pg.K_BACKSPACE:
@@ -498,8 +589,8 @@ class MenuState(State):
     # ==================== MAUS-STEUERUNG ====================
     def _get_menu_rects(self, w, h):
         """Gibt die Hitboxen der Menü-Items zurück"""
-        menu_y = h // 2 - 50
-        item_spacing = 70
+        menu_y = h // 2 - 90
+        item_spacing = 60
         box_w = 350
         box_h = 55
         box_x = w // 2 - box_w // 2
@@ -530,14 +621,17 @@ class MenuState(State):
                         self.sfx.stop_menu_music()
                     self.exit("play")
                 elif i == 1:
+                    if hasattr(self, 'sfx'):
+                        self.sfx.stop_menu_music()
+                    self.exit("profile")
+                elif i == 2:
                     self.in_perk_shop = True
                     self.perk_selected = 0
-                elif i == 2:
+                elif i == 3:
                     self.in_settings = True
                     self.settings_selected = 0
-                elif i == 3:
-                    pg.quit()
-                    exit()
+                elif i == 4:
+                    self._trigger_quit()
                 return
     
     def _get_perk_rects(self, w, h):
@@ -578,7 +672,7 @@ class MenuState(State):
         slider_h = 12
         slider_x = panel_x + 20
         rects = []
-        labels = ["Musik", "Sound-Effekte"]
+        labels = ["Music", "Sound Effects"]
         for i in range(len(labels)):
             y = 220 + i * 120
             rects.append({
@@ -590,23 +684,45 @@ class MenuState(State):
     
     def _handle_settings_input(self, event):
         """Tastatur-Input für Einstellungen"""
+        if self.reset_confirm:
+            # Bestätigungs-Dialog aktiv
+            if event.key == pg.K_RETURN or event.key == pg.K_SPACE:
+                # Reset bestätigen!
+                reset_all_progress()
+                self.reset_confirm = False
+                self.reset_flash_timer = 1.5
+                if hasattr(self, 'sfx'):
+                    self.sfx.play('explosion')
+            elif event.key == pg.K_ESCAPE or event.key == pg.K_BACKSPACE:
+                self.reset_confirm = False
+                if hasattr(self, 'sfx'):
+                    self.sfx.play('menu_confirm')
+            return
         if event.key == pg.K_ESCAPE or event.key == pg.K_BACKSPACE:
             self.in_settings = False
+            self.reset_confirm = False
             save_settings(self.settings_data)
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_confirm')
         elif event.key == pg.K_UP or event.key == pg.K_w:
-            self.settings_selected = (self.settings_selected - 1) % 2
+            self.settings_selected = (self.settings_selected - 1) % 3
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_select')
         elif event.key == pg.K_DOWN or event.key == pg.K_s:
-            self.settings_selected = (self.settings_selected + 1) % 2
+            self.settings_selected = (self.settings_selected + 1) % 3
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_select')
         elif event.key == pg.K_LEFT or event.key == pg.K_a:
-            self._adjust_setting(self.settings_selected, -5)
+            if self.settings_selected < 2:
+                self._adjust_setting(self.settings_selected, -5)
         elif event.key == pg.K_RIGHT or event.key == pg.K_d:
-            self._adjust_setting(self.settings_selected, 5)
+            if self.settings_selected < 2:
+                self._adjust_setting(self.settings_selected, 5)
+        elif event.key == pg.K_RETURN or event.key == pg.K_SPACE:
+            if self.settings_selected == 2:
+                self.reset_confirm = True
+                if hasattr(self, 'sfx'):
+                    self.sfx.play('menu_select')
     
     def _adjust_setting(self, idx, delta):
         """Ändert einen Einstellungswert"""
@@ -626,6 +742,29 @@ class MenuState(State):
     
     def _handle_settings_click(self, mx, my, w, h):
         """Mausklick in den Einstellungen"""
+        # Bestätigungs-Dialog
+        if self.reset_confirm:
+            confirm_w, confirm_h = 400, 180
+            confirm_x = w // 2 - confirm_w // 2
+            confirm_y = h // 2 - confirm_h // 2
+            # Ja-Button
+            ja_rect = pg.Rect(confirm_x + 30, confirm_y + confirm_h - 55, 150, 40)
+            if ja_rect.collidepoint(mx, my):
+                reset_all_progress()
+                self.reset_confirm = False
+                self.reset_flash_timer = 1.5
+                if hasattr(self, 'sfx'):
+                    self.sfx.play('explosion')
+                return
+            # Nein-Button
+            nein_rect = pg.Rect(confirm_x + confirm_w - 180, confirm_y + confirm_h - 55, 150, 40)
+            if nein_rect.collidepoint(mx, my):
+                self.reset_confirm = False
+                if hasattr(self, 'sfx'):
+                    self.sfx.play('menu_confirm')
+                return
+            return  # Andere Klicks ignorieren wenn Dialog offen
+        
         sliders = self._get_settings_slider_rects(w, h)
         for i, slider in enumerate(sliders):
             track = slider['track']
@@ -636,10 +775,20 @@ class MenuState(State):
                 self._update_slider_from_mouse(i, mx, w, h)
                 return
         
+        # Reset-Button
+        panel_w = min(500, w - 80)
+        reset_rect = pg.Rect(w // 2 - panel_w // 4, 460, panel_w // 2, 45)
+        if reset_rect.collidepoint(mx, my):
+            self.reset_confirm = True
+            if hasattr(self, 'sfx'):
+                self.sfx.play('menu_select')
+            return
+        
         # Zurück-Button (unten)
         back_rect = pg.Rect(w // 2 - 100, h - 100, 200, 50)
         if back_rect.collidepoint(mx, my):
             self.in_settings = False
+            self.reset_confirm = False
             save_settings(self.settings_data)
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_confirm')
@@ -876,6 +1025,10 @@ class MenuState(State):
         # Streak-Popup über allem zeichnen
         if self.show_streak_popup:
             self._draw_streak_popup(s, w, h)
+        
+        # Pirate farewell overlay (über allem)
+        if self.show_pirate_farewell:
+            self._draw_pirate_farewell(s, w, h)
     
     def _draw_background(self, s, w, h):
         """Zeichnet den animierten Ozean-Hintergrund"""
@@ -962,7 +1115,7 @@ class MenuState(State):
         self._draw_title(s, w, h)
         
         # Untertitel
-        subtitle = "Ein Piraten-Abenteuer"
+        subtitle = "A Pirate Adventure"
         subtitle_surf = self.font_subtitle.render(subtitle, True, (200, 220, 255))
         s.blit(subtitle_surf, (w // 2 - subtitle_surf.get_width() // 2, 140))
         
@@ -970,8 +1123,8 @@ class MenuState(State):
         self._draw_gem_counter(s, w, 180)
         
         # Menü-Items
-        menu_y = h // 2 - 50
-        item_spacing = 70
+        menu_y = h // 2 - 90
+        item_spacing = 60
         for i, item in enumerate(self.menu_items):
             is_selected = i == self.selected
             
@@ -1020,8 +1173,8 @@ class MenuState(State):
         # Steuerungshinweise
         controls_y = h - 80
         controls = [
-            "Pfeiltasten / W/S / Maus - Auswahlen",
-            "ENTER / LEERTASTE / Linksklick - Bestatigen"
+            "Arrow Keys / W/S / Mouse - Select",
+            "ENTER / SPACE / Left Click - Confirm"
         ]
         for i, ctrl in enumerate(controls):
             ctrl_surf = self.font_small.render(ctrl, True, (150, 170, 200))
@@ -1087,7 +1240,7 @@ class MenuState(State):
         self._wheel_icon_rect = icon_area
         
         # Credits
-        credits = "2026 Piraten Studios"
+        credits = "2026 Pirate Studios"
         credits_surf = self.font_small.render(credits, True, (100, 120, 150))
         s.blit(credits_surf, (w - credits_surf.get_width() - 10, h - 30))
     
@@ -1198,7 +1351,7 @@ class MenuState(State):
         # Error-Flash ("Nicht genug Gems!")
         if self.perk_error_flash > 0:
             error_alpha = min(255, int(self.perk_error_flash * 255))
-            error_surf = self.font_menu.render("Nicht genug Gems!", True, (255, 80, 80))
+            error_surf = self.font_menu.render("Not enough Gems!", True, (255, 80, 80))
             error_bg = pg.Surface((error_surf.get_width() + 30, error_surf.get_height() + 10), pg.SRCALPHA)
             pg.draw.rect(error_bg, (80, 0, 0, min(200, error_alpha)), (0, 0, error_bg.get_width(), error_bg.get_height()), border_radius=8)
             s.blit(error_bg, (w // 2 - error_bg.get_width() // 2, h - 110))
@@ -1206,7 +1359,7 @@ class MenuState(State):
             s.blit(error_surf, (w // 2 - error_surf.get_width() // 2, h - 105))
         
         # Steuerungshinweise
-        controls = "W/S / Maus = Auswahlen   ENTER / Klick = Kaufen   ESC = Zuruck"
+        controls = "W/S / Mouse = Select   ENTER / Click = Buy   ESC = Back"
         ctrl_surf = self.font_small.render(controls, True, (150, 170, 200))
         s.blit(ctrl_surf, (w // 2 - ctrl_surf.get_width() // 2, h - 40))
     
@@ -1214,15 +1367,15 @@ class MenuState(State):
     def _draw_settings(self, s, w, h):
         """Zeichnet das Einstellungsmenü"""
         # Titel
-        title_surf = self.font_title.render("Einstellungen", True, (255, 220, 100))
-        shadow_surf = self.font_title.render("Einstellungen", True, (0, 0, 0))
+        title_surf = self.font_title.render("Settings", True, (255, 220, 100))
+        shadow_surf = self.font_title.render("Settings", True, (0, 0, 0))
         tx = w // 2 - title_surf.get_width() // 2
         s.blit(shadow_surf, (tx + 3, 43))
         s.blit(title_surf, (tx, 40))
         
         # Panel
         panel_w = min(500, w - 80)
-        panel_h = 340
+        panel_h = 400
         panel_x = w // 2 - panel_w // 2
         panel_y = 130
         
@@ -1285,23 +1438,92 @@ class MenuState(State):
                     (arrow_x - 10 + arrow_offset, track.y + track.h // 2 + 8)
                 ])
         
+        # === Reset Progress Button ===
+        reset_btn_w = panel_w // 2
+        reset_rect = pg.Rect(w // 2 - reset_btn_w // 2, 460, reset_btn_w, 45)
+        is_reset_selected = self.settings_selected == 2
+        
+        # Button-Hintergrund
+        btn_bg = (120, 30, 30) if is_reset_selected else (80, 20, 20)
+        btn_border = (255, 80, 80) if is_reset_selected else (150, 60, 60)
+        pg.draw.rect(s, btn_bg, reset_rect, border_radius=10)
+        pg.draw.rect(s, btn_border, reset_rect, 2, border_radius=10)
+        
+        reset_label = self.font_perk.render("Reset Progress", True, (255, 100, 100) if is_reset_selected else (180, 80, 80))
+        s.blit(reset_label, (w // 2 - reset_label.get_width() // 2, 468))
+        
+        # Auswahl-Pfeil für Reset-Button
+        if is_reset_selected:
+            arrow_x = reset_rect.x - 30
+            arrow_offset = math.sin(self.timer * 8) * 3
+            pg.draw.polygon(s, (255, 80, 80), [
+                (arrow_x + arrow_offset, reset_rect.centery),
+                (arrow_x - 10 + arrow_offset, reset_rect.centery - 8),
+                (arrow_x - 10 + arrow_offset, reset_rect.centery + 8)
+            ])
+        
+        # Reset-Flash Anzeige
+        if self.reset_flash_timer > 0:
+            flash_alpha = min(255, int(self.reset_flash_timer * 170))
+            flash_text = self.font_perk.render("Progress has been reset!", True, (100, 255, 100))
+            flash_surf = pg.Surface(flash_text.get_size(), pg.SRCALPHA)
+            flash_text.set_alpha(flash_alpha)
+            s.blit(flash_text, (w // 2 - flash_text.get_width() // 2, 515))
+        
+        # === Bestätigungs-Dialog (Overlay) ===
+        if self.reset_confirm:
+            # Dimmer
+            dim_surf = pg.Surface((w, h), pg.SRCALPHA)
+            dim_surf.fill((0, 0, 0, 150))
+            s.blit(dim_surf, (0, 0))
+            
+            # Dialog-Box
+            confirm_w, confirm_h = 400, 180
+            confirm_x = w // 2 - confirm_w // 2
+            confirm_y = h // 2 - confirm_h // 2
+            pg.draw.rect(s, (30, 20, 40), (confirm_x, confirm_y, confirm_w, confirm_h), border_radius=15)
+            pg.draw.rect(s, (255, 80, 80), (confirm_x, confirm_y, confirm_w, confirm_h), 3, border_radius=15)
+            
+            # Warnung
+            warn_text = self.font_perk.render("WARNING!", True, (255, 80, 80))
+            s.blit(warn_text, (w // 2 - warn_text.get_width() // 2, confirm_y + 15))
+            
+            desc_text = self.font_small.render("All progress will be deleted!", True, (220, 200, 200))
+            s.blit(desc_text, (w // 2 - desc_text.get_width() // 2, confirm_y + 50))
+            desc2_text = self.font_small.render("(Gems, Perks, Profile, Highscore...)", True, (180, 160, 160))
+            s.blit(desc2_text, (w // 2 - desc2_text.get_width() // 2, confirm_y + 75))
+            
+            # Ja-Button
+            ja_rect = pg.Rect(confirm_x + 30, confirm_y + confirm_h - 55, 150, 40)
+            pg.draw.rect(s, (150, 30, 30), ja_rect, border_radius=8)
+            pg.draw.rect(s, (255, 80, 80), ja_rect, 2, border_radius=8)
+            ja_text = self.font_perk.render("Yes, delete!", True, (255, 100, 100))
+            s.blit(ja_text, (ja_rect.centerx - ja_text.get_width() // 2, ja_rect.y + 8))
+            
+            # Nein-Button
+            nein_rect = pg.Rect(confirm_x + confirm_w - 180, confirm_y + confirm_h - 55, 150, 40)
+            pg.draw.rect(s, (30, 80, 30), nein_rect, border_radius=8)
+            pg.draw.rect(s, (100, 200, 100), nein_rect, 2, border_radius=8)
+            nein_text = self.font_perk.render("Cancel", True, (100, 255, 100))
+            s.blit(nein_text, (nein_rect.centerx - nein_text.get_width() // 2, nein_rect.y + 8))
+        
         # Zurück-Button
         back_rect = pg.Rect(w // 2 - 100, h - 100, 200, 50)
         pg.draw.rect(s, (50, 40, 30), back_rect, border_radius=10)
         pg.draw.rect(s, (150, 170, 200), back_rect, 2, border_radius=10)
-        back_text = self.font_perk.render("Zurück", True, (200, 210, 230))
+        back_text = self.font_perk.render("Back", True, (200, 210, 230))
         s.blit(back_text, (w // 2 - back_text.get_width() // 2, h - 90))
         
         # Steuerungshinweise
         hints_y = h - 45
-        hints = "← → / A/D / Maus - Lautstärke ändern  |  ESC - Zurück"
+        hints = "← → / A/D / Mouse - Change Volume  |  ESC - Back"
         hints_surf = self.font_small.render(hints, True, (150, 170, 200))
         s.blit(hints_surf, (w // 2 - hints_surf.get_width() // 2, hints_y))
     
     def _draw_wheel(self, s, w, h):
         """Zeichnet das Glücksrad"""
         # Titel
-        title_text = "GLÜCKSRAD"
+        title_text = "LUCKY WHEEL"
         title_surf = self.font_title.render(title_text, True, (255, 220, 100))
         shadow_surf = self.font_title.render(title_text, True, (0, 0, 0))
         s.blit(shadow_surf, (w // 2 - title_surf.get_width() // 2 + 3, 23))
@@ -1429,7 +1651,7 @@ class MenuState(State):
         # Status-Text unten
         if self.wheel_claimed and not self.wheel_can_spin:
             # Keine Spins mehr
-            msg = "Komme morgen wieder!"
+            msg = "Come back tomorrow!"
             msg_surf = self.font_menu.render(msg, True, (150, 200, 255))
             s.blit(msg_surf, (w // 2 - msg_surf.get_width() // 2, h - 120))
         elif self.wheel_result is not None and not self.wheel_spinning:
@@ -1451,25 +1673,25 @@ class MenuState(State):
             pg.draw.rect(box_surf, (r_col, g_col, b_col), (0, 0, box_w, box_h), 3, border_radius=12)
             s.blit(box_surf, (box_x, box_y))
             
-            win_text = f"Du hast {gems_won} Gem{'s' if gems_won > 1 else ''} gewonnen!"
+            win_text = f"You won {gems_won} Gem{'s' if gems_won > 1 else ''}!"
             win_surf = self.font_menu.render(win_text, True, (int(255 * pulse), int(230 * pulse), int(80 * pulse)))
             s.blit(win_surf, (w // 2 - win_surf.get_width() // 2, box_y + 12))
             
             # Einsammeln-Hinweis
-            collect_text = "ENTER zum Einsammeln"
+            collect_text = "Press ENTER to collect"
             collect_pulse = abs(math.sin(self.timer * 4))
             collect_alpha = int(150 + 105 * collect_pulse)
             collect_surf = self.font_small.render(collect_text, True, (255, 255, 200))
             collect_surf.set_alpha(collect_alpha)
             s.blit(collect_surf, (w // 2 - collect_surf.get_width() // 2, h - 70))
         elif not self.wheel_can_spin:
-            msg = "Komme morgen wieder!"
+            msg = "Come back tomorrow!"
             msg_surf = self.font_menu.render(msg, True, (150, 170, 200))
             s.blit(msg_surf, (w // 2 - msg_surf.get_width() // 2, h - 120))
         elif not self.wheel_spinning:
             # Bereit zum Spinnen
             spin_pulse = abs(math.sin(self.timer * 3))
-            spin_text = "Drücke ENTER zum Drehen!"
+            spin_text = "Press ENTER to spin!"
             spin_color = (int(150 + 105 * spin_pulse), int(200 + 55 * spin_pulse), int(100 + 100 * spin_pulse))
             spin_surf = self.font_menu.render(spin_text, True, spin_color)
             s.blit(spin_surf, (w // 2 - spin_surf.get_width() // 2, h - 120))
@@ -1478,9 +1700,9 @@ class MenuState(State):
             last_spin = load_last_spin()
             today = date.today().isoformat()
             if last_spin != today:
-                daily_text = "Einmal pro Tag kostenlos!"
+                daily_text = "One free spin per day!"
             else:
-                daily_text = f"Free Spin! ({self.wheel_free_spins} uebrig)"
+                daily_text = f"Free Spin! ({self.wheel_free_spins} left)"
             daily_surf = self.font_small.render(daily_text, True, (200, 220, 255))
             s.blit(daily_surf, (w // 2 - daily_surf.get_width() // 2, h - 80))
         
@@ -1491,7 +1713,7 @@ class MenuState(State):
             s.blit(spin_surf, (w // 2 - spin_surf.get_width() // 2, 115))
         
         # Steuerungshinweise
-        controls = "ENTER = Drehen   ESC = Zurück"
+        controls = "ENTER = Spin   ESC = Back"
         ctrl_surf = self.font_small.render(controls, True, (150, 170, 200))
         s.blit(ctrl_surf, (w // 2 - ctrl_surf.get_width() // 2, h - 40))
     
@@ -1527,7 +1749,7 @@ class MenuState(State):
         s.blit(popup_surf, (box_x, box_y))
         
         # Titel
-        title_text = "LOGIN-STREAK!"
+        title_text = "LOGIN STREAK!"
         title_surf = self.font_menu.render(title_text, True, (255, 220, 100))
         shadow = self.font_menu.render(title_text, True, (0, 0, 0))
         s.blit(shadow, (w // 2 - title_surf.get_width() // 2 + 2, box_y + 18))
@@ -1570,7 +1792,7 @@ class MenuState(State):
             s.blit(day_num, (cx - day_num.get_width() // 2, cy + 20))
         
         # Streak-Counter
-        streak_text = f"Tag {self.streak_count}"
+        streak_text = f"Day {self.streak_count}"
         streak_surf = self.font_subtitle.render(streak_text, True, (255, 200, 80))
         s.blit(streak_surf, (w // 2 - streak_surf.get_width() // 2, box_y + 110))
         
@@ -1610,16 +1832,16 @@ class MenuState(State):
         
         # Typ-Beschreibung
         if self.streak_already_claimed:
-            desc = "Bereits abgeholt - komm morgen wieder!"
+            desc = "Already claimed - come back tomorrow!"
             desc_color = (140, 150, 170)
         elif reward["type"] == "xp_booster":
-            desc = "Doppelte XP im nächsten Spiel!"
+            desc = "Double XP in the next game!"
             desc_color = (180, 200, 230)
         elif reward["type"] == "free_spins":
-            desc = "Nutze sie am Glücksrad!"
+            desc = "Use them at the Lucky Wheel!"
             desc_color = (180, 200, 230)
         else:
-            desc = "Wurde deinem Konto gutgeschrieben!"
+            desc = "Added to your account!"
             desc_color = (180, 200, 230)
         desc_surf = self.font_perk_desc.render(desc, True, desc_color)
         s.blit(desc_surf, (w // 2 - desc_surf.get_width() // 2, icon_cy + 72))
@@ -1627,7 +1849,208 @@ class MenuState(State):
         # Schließen-Hinweis
         close_pulse = abs(math.sin(self.streak_popup_anim * 2))
         close_alpha = int(150 + 105 * close_pulse)
-        close_text = "ENTER zum Schließen"
+        close_text = "Press ENTER to close"
         close_surf = self.font_small.render(close_text, True, (200, 210, 230))
         close_surf.set_alpha(close_alpha)
         s.blit(close_surf, (w // 2 - close_surf.get_width() // 2, box_y + box_h - 35))
+
+    def _draw_pirate(self, surface, cx, cy, scale=1.0, bob_offset=0.0):
+        """Draws a pirate character (pixel art style)"""
+        s = scale
+        yo = int(bob_offset)
+
+        # Hat
+        hat_color = (40, 30, 25)
+        hat_band = (180, 150, 60)
+        pg.draw.ellipse(surface, hat_color,
+                        (int(cx - 28 * s), int(cy - 52 * s + yo), int(56 * s), int(22 * s)))
+        pg.draw.rect(surface, hat_color,
+                     (int(cx - 16 * s), int(cy - 68 * s + yo), int(32 * s), int(24 * s)), border_radius=int(6 * s))
+        pg.draw.rect(surface, hat_band,
+                     (int(cx - 16 * s), int(cy - 48 * s + yo), int(32 * s), int(5 * s)))
+        # Skull on hat
+        pg.draw.circle(surface, (220, 220, 210), (int(cx), int(cy - 58 * s + yo)), int(5 * s))
+        pg.draw.circle(surface, hat_color, (int(cx - 2 * s), int(cy - 59 * s + yo)), int(1.5 * s))
+        pg.draw.circle(surface, hat_color, (int(cx + 2 * s), int(cy - 59 * s + yo)), int(1.5 * s))
+
+        # Head
+        skin = (210, 170, 120)
+        pg.draw.circle(surface, skin, (int(cx), int(cy - 28 * s + yo)), int(18 * s))
+
+        # Eye patch
+        pg.draw.circle(surface, (30, 30, 30), (int(cx - 6 * s), int(cy - 30 * s + yo)), int(5 * s))
+        pg.draw.line(surface, (30, 30, 30),
+                     (int(cx - 6 * s), int(cy - 35 * s + yo)),
+                     (int(cx + 10 * s), int(cy - 46 * s + yo)), int(2 * s))
+
+        # Right eye
+        pg.draw.circle(surface, (255, 255, 255), (int(cx + 7 * s), int(cy - 30 * s + yo)), int(4 * s))
+        pg.draw.circle(surface, (40, 30, 20), (int(cx + 7 * s), int(cy - 30 * s + yo)), int(2 * s))
+
+        # Grin
+        pg.draw.arc(surface, (180, 80, 40),
+                    (int(cx - 8 * s), int(cy - 24 * s + yo), int(16 * s), int(10 * s)),
+                    3.4, 6.0, int(2 * s))
+        # Gold tooth
+        pg.draw.rect(surface, (255, 210, 50),
+                     (int(cx + 1 * s), int(cy - 19 * s + yo), int(3 * s), int(3 * s)))
+
+        # Beard
+        beard_color = (60, 40, 25)
+        for i in range(5):
+            bx = int(cx + (i - 2) * 5 * s)
+            by = int(cy - 14 * s + yo)
+            pg.draw.line(surface, beard_color, (bx, by),
+                         (bx + random.randint(-2, 2), by + int(12 * s) + random.randint(-2, 2)), int(2 * s))
+
+        # Body (coat)
+        coat_color = (120, 30, 30)
+        pg.draw.rect(surface, coat_color,
+                     (int(cx - 16 * s), int(cy - 8 * s + yo), int(32 * s), int(36 * s)),
+                     border_radius=int(4 * s))
+        # Buttons
+        for by in range(3):
+            pg.draw.circle(surface, (220, 190, 60),
+                           (int(cx), int(cy + (2 + by * 10) * s + yo)), int(2.5 * s))
+
+        # Belt
+        pg.draw.rect(surface, (60, 40, 20),
+                     (int(cx - 18 * s), int(cy + 18 * s + yo), int(36 * s), int(6 * s)))
+        pg.draw.rect(surface, (220, 190, 60),
+                     (int(cx - 4 * s), int(cy + 18 * s + yo), int(8 * s), int(6 * s)),
+                     border_radius=int(1 * s))
+
+        # Arms
+        arm_color = coat_color
+        pg.draw.line(surface, arm_color,
+                     (int(cx - 16 * s), int(cy - 2 * s + yo)),
+                     (int(cx - 30 * s), int(cy + 20 * s + yo)), int(6 * s))
+        pg.draw.circle(surface, skin, (int(cx - 30 * s), int(cy + 22 * s + yo)), int(4 * s))
+
+        # Waving arm
+        wave_angle = math.sin(self.farewell_timer * 4) * 0.4
+        arm_end_x = int(cx + 30 * s + math.sin(wave_angle) * 10 * s)
+        arm_end_y = int(cy - 20 * s + yo + math.cos(wave_angle) * 5 * s)
+        pg.draw.line(surface, arm_color,
+                     (int(cx + 16 * s), int(cy - 2 * s + yo)),
+                     (arm_end_x, arm_end_y), int(6 * s))
+        pg.draw.circle(surface, skin, (arm_end_x, arm_end_y - int(2 * s)), int(5 * s))
+
+        # Legs
+        pg.draw.rect(surface, (50, 40, 35),
+                     (int(cx - 12 * s), int(cy + 28 * s + yo), int(10 * s), int(18 * s)),
+                     border_radius=int(2 * s))
+        pg.draw.rect(surface, (50, 40, 35),
+                     (int(cx + 2 * s), int(cy + 28 * s + yo), int(10 * s), int(18 * s)),
+                     border_radius=int(2 * s))
+        # Boots
+        pg.draw.rect(surface, (35, 25, 15),
+                     (int(cx - 14 * s), int(cy + 42 * s + yo), int(14 * s), int(6 * s)),
+                     border_radius=int(2 * s))
+        pg.draw.rect(surface, (35, 25, 15),
+                     (int(cx + 0 * s), int(cy + 42 * s + yo), int(14 * s), int(6 * s)),
+                     border_radius=int(2 * s))
+
+    def _draw_pirate_farewell(self, surface, w, h):
+        """Draws the pirate farewell dialog over the menu"""
+        # Dark overlay
+        overlay = pg.Surface((w, h), pg.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        surface.blit(overlay, (0, 0))
+
+        # Pirate position
+        pirate_x = w // 2 - 80
+        pirate_y = h // 2 + 60
+        bob = math.sin(self.farewell_timer * 2) * 3
+
+        # Draw pirate
+        try:
+            self._draw_pirate(surface, pirate_x, pirate_y, scale=1.8, bob_offset=bob)
+        except Exception:
+            traceback.print_exc()
+            fallback = self.font_title.render("\u2693", True, (255, 255, 255))
+            surface.blit(fallback, (pirate_x - 20, pirate_y - 30))
+
+        # Speech bubble
+        bubble_w = 280
+        bubble_h = 100
+        bubble_x = w // 2 - 20
+        bubble_y = h // 2 - 80
+        tail_x = pirate_x + 30
+        tail_y = pirate_y - 60 + int(bob)
+
+        # Draw bubble
+        bubble = pg.Surface((bubble_w, bubble_h), pg.SRCALPHA)
+        pg.draw.rect(bubble, (245, 235, 210, 240), (0, 0, bubble_w, bubble_h), border_radius=16)
+        pg.draw.rect(bubble, (160, 130, 80, 200), (0, 0, bubble_w, bubble_h), 3, border_radius=16)
+        surface.blit(bubble, (bubble_x, bubble_y))
+
+        # Tail
+        tail_points = [
+            (tail_x, tail_y),
+            (bubble_x + bubble_w // 3, bubble_y + bubble_h - 2),
+            (bubble_x + bubble_w // 3 + 20, bubble_y + bubble_h - 2),
+        ]
+        pg.draw.polygon(surface, (245, 235, 210, 240), tail_points)
+        pg.draw.line(surface, (160, 130, 80, 200), tail_points[0], tail_points[1], 3)
+        pg.draw.line(surface, (160, 130, 80, 200), tail_points[0], tail_points[2], 3)
+
+        # Text
+        lines = self.farewell_text.split('\n')
+        ty = bubble_y + 14
+        for line in lines:
+            text_surf = self.font_speech.render(line, True, (50, 35, 20))
+            text_rect = text_surf.get_rect(centerx=bubble_x + bubble_w // 2, top=ty)
+            surface.blit(text_surf, text_rect)
+            ty += 22
+
+        # Buttons
+        btn_w = 140
+        btn_h = 38
+        btn_gap = 20
+        total_w = btn_w * 2 + btn_gap
+        btn_start_x = w // 2 - total_w // 2 + 40
+        btn_y = h // 2 + 120
+
+        farewell_buttons = [
+            ("I'll stay!", (40, 130, 70), (60, 190, 90)),
+            ("Goodbye!", (130, 40, 40), (190, 60, 60)),
+        ]
+        self._farewell_btn_rects = []
+
+        for i, (label, color, hover_color) in enumerate(farewell_buttons):
+            bx = btn_start_x + i * (btn_w + btn_gap)
+            rect = pg.Rect(bx, btn_y, btn_w, btn_h)
+            self._farewell_btn_rects.append(rect)
+
+            is_sel = (self.farewell_btn_selected == i)
+            is_hov = (self.farewell_mouse_hover == i)
+
+            btn_surf = pg.Surface((btn_w, btn_h), pg.SRCALPHA)
+            if is_sel or is_hov:
+                bg = (*hover_color, 230)
+                border = (255, 255, 255, 200)
+                text_col = (255, 255, 255)
+            else:
+                bg = (*color, 170)
+                border = (140, 140, 140, 130)
+                text_col = (210, 210, 220)
+            pg.draw.rect(btn_surf, bg, (0, 0, btn_w, btn_h), border_radius=8)
+            pg.draw.rect(btn_surf, border, (0, 0, btn_w, btn_h), 2, border_radius=8)
+
+            if is_sel:
+                pulse = abs(math.sin(self.farewell_timer * 4)) * 0.4 + 0.6
+                pg.draw.rect(btn_surf, (255, 255, 255, int(pulse * 160)),
+                             (4, 4, 3, btn_h - 8), border_radius=2)
+
+            surface.blit(btn_surf, (bx, btn_y))
+
+            btn_text = self.font_menu.render(label, True, text_col)
+            text_rect = btn_text.get_rect(center=(bx + btn_w // 2, btn_y + btn_h // 2))
+            surface.blit(btn_text, text_rect)
+
+        # Hint
+        hint = self.font_small.render("\u2190 \u2192 Select  \u00b7  Enter Confirm  \u00b7  ESC Back",
+                                      True, (120, 120, 150))
+        hint_rect = hint.get_rect(centerx=w // 2 + 40, top=btn_y + btn_h + 12)
+        surface.blit(hint, hint_rect)
