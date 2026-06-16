@@ -42,6 +42,27 @@ def save_profile(profile):
         json.dump(data, f)
 
 
+def load_achievement_state():
+    """Lädt globalen Achievement-Fortschritt aus der Save-Datei."""
+    data = _load_full_save()
+    ach = data.get('achievements', {})
+    return {
+        'total_kills': int(ach.get('total_kills', 0)),
+        'total_playtime_seconds': float(ach.get('total_playtime_seconds', 0.0)),
+        'unlocked': list(ach.get('unlocked', [])),
+    }
+
+
+def load_unlocked_pirates():
+    """Lädt freigeschaltete Piratenklassen."""
+    data = _load_full_save()
+    base = {'balanced', 'berserker', 'navigator', 'engineer'}
+    unlocked = data.get('unlocked_pirates', list(base))
+    if not isinstance(unlocked, list):
+        return set(base)
+    return set(unlocked) | base
+
+
 def add_profile_xp(xp_amount, kills=0, playtime=0.0):
     """Fügt Profil-XP hinzu und berechnet Level-Ups. Gibt (neues_level, level_ups) zurück."""
     profile = load_profile()
@@ -125,6 +146,65 @@ TALENT_PATHS = [
         ],
     },
 ]
+
+
+ACHIEVEMENTS = [
+    {
+        'id': 'kill_250',
+        'name': 'Deck Cleaner',
+        'description': 'Get 250 total kills',
+        'type': 'kills',
+        'target': 250,
+        'reward_gems': 10,
+        'unlock_pirate': None,
+    },
+    {
+        'id': 'kill_1000',
+        'name': 'Butcher of the Sea',
+        'description': 'Get 1000 total kills',
+        'type': 'kills',
+        'target': 1000,
+        'reward_gems': 25,
+        'unlock_pirate': 'reaper',
+    },
+    {
+        'id': 'play_60_min',
+        'name': 'Veteran Sailor',
+        'description': 'Play for 60 total minutes',
+        'type': 'playtime',
+        'target': 3600,
+        'reward_gems': 20,
+        'unlock_pirate': 'old_salt',
+    },
+    {
+        'id': 'kill_5000',
+        'name': 'Kraken Bane',
+        'description': 'Get 5000 total kills',
+        'type': 'kills',
+        'target': 5000,
+        'reward_gems': 60,
+        'unlock_pirate': None,
+    },
+    {
+        'id': 'play_180_min',
+        'name': 'Sea Legend',
+        'description': 'Play for 180 total minutes',
+        'type': 'playtime',
+        'target': 10800,
+        'reward_gems': 40,
+        'unlock_pirate': None,
+    },
+]
+
+
+PIRATE_CLASS_NAMES = {
+    'balanced': 'Balanced Captain',
+    'berserker': 'Berserker Raider',
+    'navigator': 'Storm Navigator',
+    'engineer': 'Iron Engineer',
+    'reaper': 'Reaper Corsair',
+    'old_salt': 'Old Salt Veteran',
+}
 
 
 def get_talent_level(talent_id):
@@ -328,7 +408,7 @@ class ProfileState(State):
 
         self.timer = 0
         self.selected_path = 0
-        self.tab = 0   # 0 = Übersicht, 1 = Talente
+        self.tab = 0   # 0 = Overview, 1 = Talents, 2 = Achievements
         self.error_flash = 0
         self.buy_flash = {}
         self.wave_offset = 0
@@ -378,7 +458,7 @@ class ProfileState(State):
                 if event.key == pg.K_ESCAPE or event.key == pg.K_BACKSPACE:
                     self.exit("menu")
                 elif event.key == pg.K_TAB:
-                    self.tab = (self.tab + 1) % 2
+                    self.tab = (self.tab + 1) % 3
                     self.tab_anim = 0.0
                     if hasattr(self, 'sfx'):
                         self.sfx.play('menu_select')
@@ -407,7 +487,7 @@ class ProfileState(State):
 
     def _handle_mouse_hover(self, mx, my, w, h):
         # Tab hover
-        tab_labels = ["Übersicht", "Talente"]
+        tab_labels = ["Overview", "Talents", "Achievements"]
         tab_w = 170
         tab_start_x = w // 2 - (len(tab_labels) * tab_w) // 2
         for i in range(len(tab_labels)):
@@ -435,7 +515,7 @@ class ProfileState(State):
         mx, my = pos
 
         # Tab-Buttons
-        tab_labels = ["Übersicht", "Talente"]
+        tab_labels = ["Overview", "Talents", "Achievements"]
         tab_w = 170
         tab_start_x = w // 2 - (len(tab_labels) * tab_w) // 2
         for i in range(len(tab_labels)):
@@ -506,14 +586,16 @@ class ProfileState(State):
         alpha = min(255, int(self.tab_anim * 255))
         if self.tab == 0:
             self._draw_overview(s, w, h, alpha)
-        else:
+        elif self.tab == 1:
             self._draw_talents(s, w, h, alpha)
+        else:
+            self._draw_achievements(s, w, h, alpha)
 
         # Steuerungshinweise
         self._draw_controls_hint(s, w, h)
 
     def _draw_animated_title(self, s, w):
-        title = "PROFIL"
+        title = "PROFILE"
         title_x = w // 2
         title_y = 18
         for i, char in enumerate(title):
@@ -530,7 +612,7 @@ class ProfileState(State):
             s.blit(char_surf, (char_x, title_y + offset_y))
 
     def _draw_tabs(self, s, w, h):
-        tab_labels = ["Übersicht", "Talente"]
+        tab_labels = ["Overview", "Talents", "Achievements"]
         tab_w = 170
         tab_start_x = w // 2 - (len(tab_labels) * tab_w) // 2
         mouse_pos = pg.mouse.get_pos()
@@ -599,12 +681,18 @@ class ProfileState(State):
         s.blit(vignette, (0, 0))
 
     def _draw_controls_hint(self, s, w, h):
-        hints = [
-            ("TAB", "Switch"),
-            ("W/S", "Select"),
-            ("ENTER", "Buy"),
-            ("ESC", "Back"),
-        ]
+        if self.tab == 1:
+            hints = [
+                ("TAB", "Switch"),
+                ("W/S", "Select"),
+                ("ENTER", "Buy"),
+                ("ESC", "Back"),
+            ]
+        else:
+            hints = [
+                ("TAB", "Switch"),
+                ("ESC", "Back"),
+            ]
         total_w = 0
         rendered = []
         for key, desc in hints:
@@ -996,4 +1084,99 @@ class ProfileState(State):
             s.blit(err_bg, (ex, ey))
             err_surf.set_alpha(alpha_val)
             s.blit(err_surf, (ex + 18, ey + 7))
+
+    # ==================== ACHIEVEMENTS ====================
+    def _draw_achievements(self, s, w, h, alpha):
+        achievement_state = load_achievement_state()
+        unlocked_ids = set(achievement_state.get('unlocked', []))
+        unlocked_pirates = load_unlocked_pirates()
+
+        total_kills = int(achievement_state.get('total_kills', 0))
+        total_playtime_seconds = float(achievement_state.get('total_playtime_seconds', 0.0))
+        total_playtime_minutes = int(total_playtime_seconds // 60)
+
+        panel_w = min(780, w - 50)
+        panel_x = w // 2 - panel_w // 2
+        row_h = 92
+        row_gap = 10
+        start_y = 150
+
+        for i, ach in enumerate(ACHIEVEMENTS):
+            row_y = start_y + i * (row_h + row_gap)
+            row_rect = pg.Rect(panel_x, row_y, panel_w, row_h)
+
+            # Card background
+            row_surf = pg.Surface((row_rect.w, row_rect.h), pg.SRCALPHA)
+            unlocked = ach['id'] in unlocked_ids
+
+            if unlocked:
+                pg.draw.rect(row_surf, (24, 52, 42, 220), (0, 0, row_rect.w, row_rect.h), border_radius=12)
+                pg.draw.rect(row_surf, (90, 210, 145, 110), (0, 0, row_rect.w, row_rect.h), 2, border_radius=12)
+            else:
+                pg.draw.rect(row_surf, (16, 25, 45, 215), (0, 0, row_rect.w, row_rect.h), border_radius=12)
+                pg.draw.rect(row_surf, (70, 90, 130, 110), (0, 0, row_rect.w, row_rect.h), 1, border_radius=12)
+
+            s.blit(row_surf, row_rect.topleft)
+
+            # Progress values
+            if ach['type'] == 'kills':
+                current = total_kills
+                progress_text = f"{current} / {ach['target']} kills"
+            else:
+                current = total_playtime_seconds
+                cur_m = int(total_playtime_seconds // 60)
+                tgt_m = int(ach['target'] // 60)
+                progress_text = f"{cur_m} / {tgt_m} minutes"
+
+            ratio = min(1.0, float(current) / float(max(1, ach['target'])))
+
+            # Title and description
+            title_color = (200, 255, 220) if unlocked else (220, 230, 250)
+            title = self.font_medium.render(ach['name'], True, title_color)
+            desc = self.font_small.render(ach['description'], True, (150, 170, 205))
+            s.blit(title, (panel_x + 16, row_y + 10))
+            s.blit(desc, (panel_x + 16, row_y + 38))
+
+            # Progress bar
+            bar_w = 280
+            bar_h = 14
+            bar_x = panel_x + panel_w - bar_w - 180
+            bar_y = row_y + 20
+            pg.draw.rect(s, (20, 28, 45), (bar_x, bar_y, bar_w, bar_h), border_radius=7)
+            fill_w = int(bar_w * ratio)
+            if fill_w > 0:
+                fill_color = (90, 230, 160) if unlocked else (95, 165, 255)
+                pg.draw.rect(s, fill_color, (bar_x, bar_y, fill_w, bar_h), border_radius=7)
+            pg.draw.rect(s, (75, 95, 130), (bar_x, bar_y, bar_w, bar_h), 1, border_radius=7)
+
+            prog_surf = self.font_tiny.render(progress_text, True, (190, 205, 230))
+            s.blit(prog_surf, (bar_x, bar_y + 18))
+
+            # Reward text
+            reward_text = f"Reward: +{ach['reward_gems']} gems"
+            reward_surf = self.font_tiny.render(reward_text, True, (255, 210, 110))
+            s.blit(reward_surf, (bar_x, bar_y + 36))
+
+            if ach.get('unlock_pirate'):
+                pirate_id = ach['unlock_pirate']
+                pirate_name = PIRATE_CLASS_NAMES.get(pirate_id, pirate_id.title())
+                if pirate_id in unlocked_pirates:
+                    unlock_text = f"Class: {pirate_name} unlocked"
+                    unlock_color = (110, 240, 160)
+                else:
+                    unlock_text = f"Unlocks class: {pirate_name}"
+                    unlock_color = (160, 180, 210)
+                unlock_surf = self.font_tiny.render(unlock_text, True, unlock_color)
+                s.blit(unlock_surf, (bar_x, bar_y + 52))
+
+            # Status badge
+            badge_text = "UNLOCKED" if unlocked else "LOCKED"
+            badge_color = (80, 230, 150) if unlocked else (150, 160, 185)
+            badge = self.font_small.render(badge_text, True, badge_color)
+            s.blit(badge, (panel_x + panel_w - badge.get_width() - 16, row_y + row_h - badge.get_height() - 10))
+
+        # Footer summary
+        summary_text = f"Total Achievement Progress: {len(unlocked_ids)} / {len(ACHIEVEMENTS)}   |   Total tracked playtime: {total_playtime_minutes} minutes"
+        summary_surf = self.font_tiny.render(summary_text, True, (150, 170, 205))
+        s.blit(summary_surf, (w // 2 - summary_surf.get_width() // 2, h - 54))
 

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 import pygame as pg
@@ -31,12 +31,17 @@ class PauseState(State):
         self.timer = 0
         self.selected_button = 0  # 0=Resume, 1=Quit
         self.mouse_hover = -1
+        self.effect_hover = -1
+        self.last_mouse_pos = (0, 0)
+        self._effect_rects = []
 
     def on_enter(self, frm):
         print("Pausing")
         self.timer = 0
         self.selected_button = 0
         self.mouse_hover = -1
+        self.effect_hover = -1
+        self._effect_rects = []
 
     def _get_play_state(self) -> PlayState | None:
         """Holt den PlayState für Stats-Anzeige"""
@@ -83,13 +88,20 @@ class PauseState(State):
 
     def _check_hover(self, mouse_pos):
         """Prüft ob Maus über einem Button ist"""
+        self.last_mouse_pos = mouse_pos
         self.mouse_hover = -1
+        self.effect_hover = -1
         # Buttons werden in draw berechnet, hier cachen wir die Rects
         if hasattr(self, '_button_rects'):
             for i, rect in enumerate(self._button_rects):
                 if rect.collidepoint(mouse_pos):
                     self.mouse_hover = i
                     self.selected_button = i
+
+        for i, rect in enumerate(getattr(self, '_effect_rects', [])):
+            if rect.collidepoint(mouse_pos):
+                self.effect_hover = i
+                break
 
     def _draw_rounded_panel(self, surface, rect, bg_color, border_color, border_width=2, radius=12):
         """Zeichnet ein abgerundetes Panel mit Hintergrund und Rahmen"""
@@ -247,7 +259,7 @@ class PauseState(State):
             uy += 28
             self._draw_upgrade_bar(s, upgrades_x, uy, bar_w, "Fire Rate", play.fire_rate_level, (255, 150, 50), 2)
             uy += 28
-            self._draw_upgrade_bar(s, upgrades_x, uy, bar_w, "Regen", play.regen_level, (50, 200, 50), 3)
+            self._draw_upgrade_bar(s, upgrades_x, uy, bar_w, "Repair", play.regen_level, (50, 200, 50), 3)
             uy += 28
             self._draw_upgrade_bar(s, upgrades_x, uy, bar_w, "Health", play.max_health_level, (200, 60, 60), 4)
             uy += 28
@@ -256,6 +268,43 @@ class PauseState(State):
             # Vertikale Trennlinie zwischen Stats und Upgrades
             vline_x = panel_x + half_w + 18
             pg.draw.line(s, (50, 70, 110, 100), (vline_x, content_y + 8), (vline_x, content_y + 210), 1)
+
+            # --- Run-Effekte aus Kisten ---
+            self._effect_rects = []
+            effects = getattr(play, 'active_crate_effects', [])
+            fx_x = upgrades_x
+            fx_y = content_y + 182
+            fx_heading = self.font_small.render("Crate Effects", True, (180, 200, 240))
+            s.blit(fx_heading, (fx_x + 4, fx_y))
+
+            if effects:
+                row_y = fx_y + 22
+                max_rows = 3
+                for idx, eff in enumerate(effects[:max_rows]):
+                    rect = pg.Rect(fx_x, row_y + idx * 22, bar_w + 12, 20)
+                    self._effect_rects.append(rect)
+                    is_hover = self.effect_hover == idx
+
+                    bg = (25, 35, 58, 190) if not is_hover else (40, 55, 86, 230)
+                    pg.draw.rect(s, bg, rect, border_radius=6)
+                    pg.draw.rect(s, (*eff['color'], 180), rect, 1, border_radius=6)
+
+                    label = f"{eff['name']} x{eff['stacks']}"
+                    txt = self.font_small.render(label, True, (220, 230, 250))
+                    s.blit(txt, (rect.x + 8, rect.y + 2))
+
+                if self.effect_hover >= 0 and self.effect_hover < len(effects[:max_rows]):
+                    hover_eff = effects[self.effect_hover]
+                    mx, my = self.last_mouse_pos
+                    tip = f"{hover_eff['desc']} (Stacks: {hover_eff['stacks']})"
+                    tip_surf = self.font_small.render(tip, True, (245, 235, 210))
+                    tip_box = pg.Rect(mx + 14, my - 26, tip_surf.get_width() + 12, tip_surf.get_height() + 8)
+                    pg.draw.rect(s, (18, 24, 38, 240), tip_box, border_radius=6)
+                    pg.draw.rect(s, (*hover_eff['color'], 190), tip_box, 1, border_radius=6)
+                    s.blit(tip_surf, (tip_box.x + 6, tip_box.y + 4))
+            else:
+                none_txt = self.font_small.render("No active effects", True, (130, 145, 170))
+                s.blit(none_txt, (fx_x + 6, fx_y + 25))
 
         # ==================== BUTTONS ====================
         btn_y = panel_y + panel_h - 100

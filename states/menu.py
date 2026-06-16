@@ -182,6 +182,56 @@ DEFAULT_SETTINGS = {
     'sfx_volume': 80,
 }
 
+# ==================== PIRATEN-PRESETS ====================
+PIRATE_PRESETS = [
+    {
+        'id': 'balanced',
+        'name': 'Balanced Captain',
+        'boost': '+10% Repair Rate',
+        'debuff': '-5% Damage',
+        'boost_color': (100, 230, 180),
+    },
+    {
+        'id': 'berserker',
+        'name': 'Berserker Raider',
+        'boost': '+20% Damage',
+        'debuff': '-15% Max HP',
+        'boost_color': (255, 120, 90),
+    },
+    {
+        'id': 'navigator',
+        'name': 'Storm Navigator',
+        'boost': '+18% Speed',
+        'debuff': '+15% Reload Time',
+        'boost_color': (120, 180, 255),
+    },
+    {
+        'id': 'engineer',
+        'name': 'Iron Engineer',
+        'boost': '+20% Max HP',
+        'debuff': '-10% Speed',
+        'boost_color': (255, 210, 120),
+    },
+    {
+        'id': 'reaper',
+        'name': 'Reaper Corsair',
+        'boost': '+30% Damage',
+        'debuff': '-20% Max HP',
+        'boost_color': (255, 90, 90),
+        'unlock_req': 'Achievement: 1000 total kills',
+    },
+    {
+        'id': 'old_salt',
+        'name': 'Old Salt Veteran',
+        'boost': '+25% Repair, +10% HP',
+        'debuff': '-10% Damage',
+        'boost_color': (120, 220, 180),
+        'unlock_req': 'Achievement: 60 total minutes played',
+    },
+]
+
+BASE_UNLOCKED_PIRATES = {'balanced', 'berserker', 'navigator', 'engineer'}
+
 def load_settings():
     """Lädt die Einstellungen aus der Save-Datei"""
     data = load_full_save()
@@ -196,6 +246,43 @@ def save_settings(settings):
     data['settings'] = settings
     with open(GEM_SAVE_FILE, 'w') as f:
         json.dump(data, f)
+
+
+def load_selected_pirate_id():
+    """Lädt die aktuell ausgewählte Piratenklasse"""
+    data = load_full_save()
+    return data.get('selected_pirate_id', PIRATE_PRESETS[0]['id'])
+
+
+def save_selected_pirate_id(pirate_id):
+    """Speichert die aktuell ausgewählte Piratenklasse"""
+    data = load_full_save()
+    data['selected_pirate_id'] = pirate_id
+    with open(GEM_SAVE_FILE, 'w') as f:
+        json.dump(data, f)
+
+
+def load_unlocked_pirate_ids():
+    """Lädt freigeschaltete Piratenklassen"""
+    data = load_full_save()
+    unlocked = data.get('unlocked_pirates', list(BASE_UNLOCKED_PIRATES))
+    if not isinstance(unlocked, list):
+        return set(BASE_UNLOCKED_PIRATES)
+    return set(unlocked) | set(BASE_UNLOCKED_PIRATES)
+
+
+def save_unlocked_pirate_ids(unlocked_ids):
+    """Speichert freigeschaltete Piratenklassen"""
+    data = load_full_save()
+    data['unlocked_pirates'] = sorted(set(unlocked_ids) | set(BASE_UNLOCKED_PIRATES))
+    with open(GEM_SAVE_FILE, 'w') as f:
+        json.dump(data, f)
+
+
+def load_achievement_state():
+    """Lädt Achievement-State aus Save"""
+    data = load_full_save()
+    return data.get('achievements', {})
 
 
 def reset_all_progress():
@@ -220,6 +307,13 @@ def reset_all_progress():
         'free_spins': 0,
         'xp_booster_minutes': 0,
         'streak_count': 0,
+        'selected_pirate_id': 'balanced',
+        'unlocked_pirates': sorted(list(BASE_UNLOCKED_PIRATES)),
+        'achievements': {
+            'total_kills': 0,
+            'total_playtime_seconds': 0,
+            'unlocked': [],
+        },
     }
     with open(GEM_SAVE_FILE, 'w') as f:
         json.dump(new_data, f)
@@ -300,6 +394,14 @@ class MenuState(State):
         
         # Menu items
         self.menu_items = ["Start Game", "Profile", "Perks", "Settings", "Quit"]
+        selected_id = load_selected_pirate_id()
+        self.unlocked_pirates = load_unlocked_pirate_ids()
+        self.selected_pirate_idx = 0
+        for i, preset in enumerate(PIRATE_PRESETS):
+            if preset['id'] == selected_id:
+                self.selected_pirate_idx = i
+                break
+        self.pirate_lock_flash = 0.0
         
         # Perk-Shop State
         self.in_perk_shop = False
@@ -378,6 +480,13 @@ class MenuState(State):
         self.sfx.start_menu_music()
         # Partikel neu erstellen
         self.particles = [MenuParticle(self.last_w, self.last_h) for _ in range(50)]
+        # Ausgewählten Piraten neu laden (falls extern geändert)
+        selected_id = load_selected_pirate_id()
+        self.unlocked_pirates = load_unlocked_pirate_ids()
+        for i, preset in enumerate(PIRATE_PRESETS):
+            if preset['id'] == selected_id:
+                self.selected_pirate_idx = i
+                break
         # Login-Streak prüfen
         self._check_login_streak()
     
@@ -404,6 +513,8 @@ class MenuState(State):
                 del self.perk_buy_flash[perk_id]
         if self.perk_error_flash > 0:
             self.perk_error_flash -= dt_seconds
+        if self.pirate_lock_flash > 0:
+            self.pirate_lock_flash -= dt_seconds
         if self.reset_flash_timer > 0:
             self.reset_flash_timer -= dt_seconds
         
@@ -548,10 +659,26 @@ class MenuState(State):
             self.selected = (self.selected + 1) % len(self.menu_items)
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_select')
+        elif event.key == pg.K_LEFT or event.key == pg.K_a:
+            self.selected_pirate_idx = (self.selected_pirate_idx - 1) % len(PIRATE_PRESETS)
+            save_selected_pirate_id(PIRATE_PRESETS[self.selected_pirate_idx]['id'])
+            if hasattr(self, 'sfx'):
+                self.sfx.play('menu_select')
+        elif event.key == pg.K_RIGHT or event.key == pg.K_d:
+            self.selected_pirate_idx = (self.selected_pirate_idx + 1) % len(PIRATE_PRESETS)
+            save_selected_pirate_id(PIRATE_PRESETS[self.selected_pirate_idx]['id'])
+            if hasattr(self, 'sfx'):
+                self.sfx.play('menu_select')
         elif event.key == pg.K_RETURN or event.key == pg.K_SPACE:
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_confirm')
             if self.selected == 0:
+                selected_pirate = PIRATE_PRESETS[self.selected_pirate_idx]
+                if selected_pirate['id'] not in self.unlocked_pirates:
+                    self.pirate_lock_flash = 1.2
+                    if hasattr(self, 'sfx'):
+                        self.sfx.play('error')
+                    return
                 if hasattr(self, 'sfx'):
                     self.sfx.stop_menu_music()
                 self.exit("play")
@@ -617,6 +744,12 @@ class MenuState(State):
                 if hasattr(self, 'sfx'):
                     self.sfx.play('menu_confirm')
                 if i == 0:
+                    selected_pirate = PIRATE_PRESETS[self.selected_pirate_idx]
+                    if selected_pirate['id'] not in self.unlocked_pirates:
+                        self.pirate_lock_flash = 1.2
+                        if hasattr(self, 'sfx'):
+                            self.sfx.play('error')
+                        return
                     if hasattr(self, 'sfx'):
                         self.sfx.stop_menu_music()
                     self.exit("play")
@@ -1121,6 +1254,47 @@ class MenuState(State):
         
         # Gem-Anzeige 
         self._draw_gem_counter(s, w, 180)
+
+        # Piraten-Auswahl
+        selected_pirate = PIRATE_PRESETS[self.selected_pirate_idx]
+        is_unlocked = selected_pirate['id'] in self.unlocked_pirates
+        picker_w = 520
+        picker_h = 88
+        picker_x = w // 2 - picker_w // 2
+        picker_y = 206
+        pg.draw.rect(s, (18, 28, 52), (picker_x, picker_y, picker_w, picker_h), border_radius=12)
+        border_col = selected_pirate['boost_color'] if is_unlocked else (140, 140, 140)
+        pg.draw.rect(s, border_col, (picker_x, picker_y, picker_w, picker_h), 2, border_radius=12)
+
+        title = self.font_small.render("Pirate Class (A/D or Left/Right)", True, (210, 225, 255))
+        s.blit(title, (picker_x + 14, picker_y + 8))
+
+        name_color = selected_pirate['boost_color'] if is_unlocked else (170, 170, 170)
+        pirate_name = self.font_menu.render(selected_pirate['name'], True, name_color)
+        s.blit(pirate_name, (w // 2 - pirate_name.get_width() // 2, picker_y + 26))
+
+        boost_col = (120, 240, 180) if is_unlocked else (130, 130, 130)
+        debuff_col = (255, 140, 140) if is_unlocked else (130, 130, 130)
+        boost_txt = self.font_perk_desc.render(f"Boost: {selected_pirate['boost']}", True, boost_col)
+        debuff_txt = self.font_perk_desc.render(f"Debuff: {selected_pirate['debuff']}", True, debuff_col)
+        s.blit(boost_txt, (picker_x + 14, picker_y + 62))
+        s.blit(debuff_txt, (picker_x + picker_w - debuff_txt.get_width() - 14, picker_y + 62))
+
+        if not is_unlocked:
+            req = selected_pirate.get('unlock_req', 'Locked')
+            req_surf = self.font_perk_desc.render(req, True, (255, 210, 130))
+            s.blit(req_surf, (w // 2 - req_surf.get_width() // 2, picker_y + picker_h + 4))
+            if self.pirate_lock_flash > 0:
+                pulse = abs(math.sin(self.timer * 12))
+                warn = self.font_small.render("Class locked: complete achievement first", True, (255, int(120 + 100 * pulse), int(120 + 100 * pulse)))
+                s.blit(warn, (w // 2 - warn.get_width() // 2, picker_y + picker_h + 24))
+
+        arrow_col = (255, 220, 100)
+        ly = picker_y + picker_h // 2
+        lx = picker_x + 14
+        rx = picker_x + picker_w - 14
+        pg.draw.polygon(s, arrow_col, [(lx, ly), (lx + 14, ly - 10), (lx + 14, ly + 10)])
+        pg.draw.polygon(s, arrow_col, [(rx, ly), (rx - 14, ly - 10), (rx - 14, ly + 10)])
         
         # Menü-Items
         menu_y = h // 2 - 90
@@ -1174,6 +1348,7 @@ class MenuState(State):
         controls_y = h - 80
         controls = [
             "Arrow Keys / W/S / Mouse - Select",
+            "A/D or Left/Right - Pirate Class",
             "ENTER / SPACE / Left Click - Confirm"
         ]
         for i, ctrl in enumerate(controls):
