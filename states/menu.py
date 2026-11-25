@@ -12,59 +12,6 @@ from states.pause import PIRATE_FAREWELL_LINES
 # Gem-Datei für Anzeige im Menü
 GEM_SAVE_FILE = "gems_save.json"
 
-# ==================== PERK-DEFINITIONEN ====================
-PERKS = [
-    {
-        "id": "hull",
-        "name": "Reinforced Hull",
-        "description": "+20 Max HP per Level",
-        "icon_color": (200, 50, 50),
-        "max_level": 5,
-        "cost_per_level": [5, 12, 22, 35, 55],
-    },
-    {
-        "id": "cannons",
-        "name": "Better Cannons",
-        "description": "+10 Damage per Level",
-        "icon_color": (255, 150, 50),
-        "max_level": 5,
-        "cost_per_level": [5, 12, 22, 35, 55],
-    },
-    {
-        "id": "sails",
-        "name": "Faster Sails",
-        "description": "+10% Speed per Level",
-        "icon_color": (50, 200, 100),
-        "max_level": 5,
-        "cost_per_level": [5, 10, 18, 28, 45],
-    },
-    {
-        "id": "repair",
-        "name": "Auto-Repair",
-        "description": "+1 HP/s Regen per Level",
-        "icon_color": (50, 150, 255),
-        "max_level": 5,
-        "cost_per_level": [8, 15, 25, 40, 65],
-    },
-    {
-        "id": "reload",
-        "name": "Fast Reload",
-        "description": "-10% Shot Cooldown per Level",
-        "icon_color": (200, 200, 50),
-        "max_level": 5,
-        "cost_per_level": [6, 14, 24, 38, 55],
-    },
-    {
-        "id": "xp_boost",
-        "name": "XP-Boost",
-        "description": "+15% more XP per Level",
-        "icon_color": (180, 100, 255),
-        "max_level": 5,
-        "cost_per_level": [6, 14, 24, 38, 55],
-    },
-]
-
-
 def load_gems():
     """Lädt die Gem-Anzahl aus der Datei"""
     if os.path.exists(GEM_SAVE_FILE):
@@ -94,20 +41,6 @@ def load_full_save():
         except:
             return {'gems': 0, 'perks': {}}
     return {'gems': 0, 'perks': {}}
-
-
-def load_perks():
-    """Lädt die Perk-Level aus der Datei"""
-    data = load_full_save()
-    return data.get('perks', {})
-
-
-def save_perks(perks):
-    """Speichert die Perk-Level in die Datei"""
-    data = load_full_save()
-    data['perks'] = perks
-    with open(GEM_SAVE_FILE, 'w') as f:
-        json.dump(data, f)
 
 
 def load_last_spin():
@@ -190,6 +123,9 @@ PIRATE_PRESETS = [
         'boost': '+10% Repair Rate',
         'debuff': '-5% Damage',
         'boost_color': (100, 230, 180),
+        'price': 0,
+        'defense': 0.05,
+        'evasion': 0.05,
     },
     {
         'id': 'berserker',
@@ -197,6 +133,9 @@ PIRATE_PRESETS = [
         'boost': '+20% Damage',
         'debuff': '-15% Max HP',
         'boost_color': (255, 120, 90),
+        'price': 15,
+        'defense': 0.0,
+        'evasion': 0.0,
     },
     {
         'id': 'navigator',
@@ -204,6 +143,9 @@ PIRATE_PRESETS = [
         'boost': '+18% Speed',
         'debuff': '+15% Reload Time',
         'boost_color': (120, 180, 255),
+        'price': 15,
+        'defense': 0.0,
+        'evasion': 0.15,
     },
     {
         'id': 'engineer',
@@ -211,14 +153,29 @@ PIRATE_PRESETS = [
         'boost': '+20% Max HP',
         'debuff': '-10% Speed',
         'boost_color': (255, 210, 120),
+        'price': 20,
+        'defense': 0.15,
+        'evasion': 0.0,
     },
     {
-        'id': 'reaper',
-        'name': 'Reaper Corsair',
-        'boost': '+30% Damage',
-        'debuff': '-20% Max HP',
-        'boost_color': (255, 90, 90),
-        'unlock_req': 'Achievement: 1000 total kills',
+        'id': 'gunslinger',
+        'name': 'Quickdraw Gunner',
+        'boost': '-25% Reload Time',
+        'debuff': '-10% Damage',
+        'boost_color': (255, 230, 120),
+        'price': 30,
+        'defense': 0.0,
+        'evasion': 0.08,
+    },
+    {
+        'id': 'duelist',
+        'name': 'Sea Duelist',
+        'boost': '+12% Damage & Speed',
+        'debuff': '-10% Max HP',
+        'boost_color': (180, 160, 255),
+        'price': 35,
+        'defense': 0.05,
+        'evasion': 0.12,
     },
     {
         'id': 'old_salt',
@@ -226,11 +183,56 @@ PIRATE_PRESETS = [
         'boost': '+25% Repair, +10% HP',
         'debuff': '-10% Damage',
         'boost_color': (120, 220, 180),
-        'unlock_req': 'Achievement: 60 total minutes played',
+        'price': 45,
+        'defense': 0.10,
+        'evasion': 0.05,
+    },
+    {
+        'id': 'juggernaut',
+        'name': 'Juggernaut',
+        'boost': '+40% Max HP',
+        'debuff': '-18% Speed',
+        'boost_color': (150, 200, 255),
+        'price': 55,
+        'defense': 0.25,
+        'evasion': 0.0,
+    },
+    {
+        'id': 'reaper',
+        'name': 'Reaper Corsair',
+        'boost': '+30% Damage',
+        'debuff': '-20% Max HP',
+        'boost_color': (255, 90, 90),
+        'price': 70,
+        'defense': 0.0,
+        'evasion': 0.05,
+    },
+    {
+        'id': 'warlord',
+        'name': 'Dread Warlord',
+        'boost': '+25% Dmg, +15% HP, +5% Spd',
+        'debuff': '-15% Repair Rate',
+        'boost_color': (255, 140, 140),
+        'price': 90,
+        'defense': 0.12,
+        'evasion': 0.08,
     },
 ]
 
-BASE_UNLOCKED_PIRATES = {'balanced', 'berserker', 'navigator', 'engineer'}
+BASE_UNLOCKED_PIRATES = {'balanced'}
+
+
+def class_boost_text(preset):
+    """Boost-Text einer Klasse inkl. Defense/Evasion als normale Stats."""
+    parts = [preset['boost']]
+    d = preset.get('defense', 0)
+    e = preset.get('evasion', 0)
+    if d:
+        parts.append(f"+{int(round(d * 100))}% Def")
+    if e:
+        parts.append(f"+{int(round(e * 100))}% Eva")
+    return ", ".join(parts)
+
 
 def load_settings():
     """Lädt die Einstellungen aus der Save-Datei"""
@@ -314,6 +316,9 @@ def reset_all_progress():
             'total_playtime_seconds': 0,
             'unlocked': [],
         },
+        'crew_roster': [],
+        'fleet': [{'class_name': 'Sloop', 'hp_mult': 1.0, 'speed_mult': 1.0, 'dmg_mult': 1.0, 'sprite_key': 'default'}],
+        'active_ship_idx': 0,
     }
     with open(GEM_SAVE_FILE, 'w') as f:
         json.dump(new_data, f)
@@ -393,7 +398,7 @@ class MenuState(State):
         self.font_perk_desc = pg.font.SysFont("Arial", 18)
         
         # Menu items
-        self.menu_items = ["Start Game", "Profile", "Perks", "Settings", "Quit"]
+        self.menu_items = ["Start Game", "Profile", "Class Shop", "Settings", "Quit"]
         selected_id = load_selected_pirate_id()
         self.unlocked_pirates = load_unlocked_pirate_ids()
         self.selected_pirate_idx = 0
@@ -404,7 +409,7 @@ class MenuState(State):
         self.pirate_lock_flash = 0.0
         
         # Perk-Shop State
-        self.in_perk_shop = False
+        self.in_class_shop = False
         
         # Glücksrad State
         self.in_wheel = False
@@ -442,8 +447,9 @@ class MenuState(State):
         self.farewell_mouse_hover = -1
         self._farewell_btn_rects: list[pg.Rect] = []
         self.font_speech = pg.font.SysFont("Arial", 18, bold=True)
+        self.pirate_frames = self._load_pirate_frames()
         
-        self.perk_selected = 0
+        self.class_shop_selected = 0
         self.perk_buy_flash = {}  # perk_id -> timer für Kauf-Animation
         self.perk_error_flash = 0  # Timer für "nicht genug Gems" Feedback
         
@@ -572,8 +578,8 @@ class MenuState(State):
                     self._handle_settings_input(event)
                 elif self.in_wheel:
                     self._handle_wheel_input(event)
-                elif self.in_perk_shop:
-                    self._handle_perk_shop_input(event)
+                elif self.in_class_shop:
+                    self._handle_class_shop_input(event)
                 else:
                     self._handle_menu_input(event)
             elif event.type == pg.MOUSEMOTION:
@@ -590,8 +596,8 @@ class MenuState(State):
                     self._handle_settings_mouse_drag(mx, my, w, h)
                 elif self.in_wheel:
                     pass
-                elif self.in_perk_shop:
-                    self._handle_perk_mouse_hover(mx, my, w, h)
+                elif self.in_class_shop:
+                    self._handle_class_mouse_hover(mx, my, w, h)
                 else:
                     self._handle_menu_mouse_hover(mx, my, w, h)
             elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
@@ -607,8 +613,8 @@ class MenuState(State):
                     self._handle_settings_click(mx, my, w, h)
                 elif self.in_wheel:
                     self._handle_wheel_click(mx, my, w, h)
-                elif self.in_perk_shop:
-                    self._handle_perk_click(mx, my, w, h)
+                elif self.in_class_shop:
+                    self._handle_class_click(mx, my, w, h)
                 else:
                     self._handle_menu_click(mx, my, w, h)
                     # Glücksrad-Icon Klick prüfen
@@ -687,8 +693,8 @@ class MenuState(State):
                     self.sfx.stop_menu_music()
                 self.exit("profile")
             elif self.selected == 2:
-                self.in_perk_shop = True
-                self.perk_selected = 0
+                self.in_class_shop = True
+                self.class_shop_selected = 0
             elif self.selected == 3:
                 self.in_settings = True
                 self.settings_selected = 0
@@ -697,21 +703,21 @@ class MenuState(State):
         elif event.key == pg.K_ESCAPE:
             self._trigger_quit()
     
-    def _handle_perk_shop_input(self, event):
+    def _handle_class_shop_input(self, event):
         if event.key == pg.K_ESCAPE or event.key == pg.K_BACKSPACE:
-            self.in_perk_shop = False
+            self.in_class_shop = False
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_confirm')
         elif event.key == pg.K_UP or event.key == pg.K_w:
-            self.perk_selected = (self.perk_selected - 1) % len(PERKS)
+            self.class_shop_selected = (self.class_shop_selected - 1) % len(PIRATE_PRESETS)
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_select')
         elif event.key == pg.K_DOWN or event.key == pg.K_s:
-            self.perk_selected = (self.perk_selected + 1) % len(PERKS)
+            self.class_shop_selected = (self.class_shop_selected + 1) % len(PIRATE_PRESETS)
             if hasattr(self, 'sfx'):
                 self.sfx.play('menu_select')
         elif event.key == pg.K_RETURN or event.key == pg.K_SPACE:
-            self._try_buy_perk()
+            self._try_buy_class()
     
     # ==================== MAUS-STEUERUNG ====================
     def _get_menu_rects(self, w, h):
@@ -758,8 +764,8 @@ class MenuState(State):
                         self.sfx.stop_menu_music()
                     self.exit("profile")
                 elif i == 2:
-                    self.in_perk_shop = True
-                    self.perk_selected = 0
+                    self.in_class_shop = True
+                    self.class_shop_selected = 0
                 elif i == 3:
                     self.in_settings = True
                     self.settings_selected = 0
@@ -767,33 +773,36 @@ class MenuState(State):
                     self._trigger_quit()
                 return
     
-    def _get_perk_rects(self, w, h):
-        """Gibt die Hitboxen der Perk-Items zurück"""
-        panel_w = min(550, w - 60)
+    def _get_class_rects(self, w, h):
+        """Gibt die Hitboxen der Klassen-Items zurück (passt sich an die Höhe an)"""
+        panel_w = min(560, w - 60)
         panel_x = w // 2 - panel_w // 2
-        start_y = 140
-        item_h = 70
+        start_y = 130
+        n = len(PIRATE_PRESETS)
+        gap = 6
+        avail = h - start_y - 60
+        item_h = max(40, min(64, avail // n - gap))
         rects = []
-        for i in range(len(PERKS)):
-            item_y = start_y + i * (item_h + 8)
+        for i in range(n):
+            item_y = start_y + i * (item_h + gap)
             rects.append(pg.Rect(panel_x, item_y, panel_w, item_h))
         return rects
-    
-    def _handle_perk_mouse_hover(self, mx, my, w, h):
-        """Aktualisiert die Perk-Auswahl bei Maus-Hover"""
-        for i, rect in enumerate(self._get_perk_rects(w, h)):
+
+    def _handle_class_mouse_hover(self, mx, my, w, h):
+        """Aktualisiert die Klassen-Auswahl bei Maus-Hover"""
+        for i, rect in enumerate(self._get_class_rects(w, h)):
             if rect.collidepoint(mx, my):
-                if self.perk_selected != i and hasattr(self, 'sfx'):
+                if self.class_shop_selected != i and hasattr(self, 'sfx'):
                     self.sfx.play('menu_select')
-                self.perk_selected = i
+                self.class_shop_selected = i
                 return
-    
-    def _handle_perk_click(self, mx, my, w, h):
-        """Perk per Mausklick kaufen"""
-        for i, rect in enumerate(self._get_perk_rects(w, h)):
+
+    def _handle_class_click(self, mx, my, w, h):
+        """Klasse per Mausklick kaufen/auswählen"""
+        for i, rect in enumerate(self._get_class_rects(w, h)):
             if rect.collidepoint(mx, my):
-                self.perk_selected = i
-                self._try_buy_perk()
+                self.class_shop_selected = i
+                self._try_buy_class()
                 return
     
     # ==================== EINSTELLUNGEN ====================
@@ -1111,25 +1120,32 @@ class MenuState(State):
         self.wheel_result = WHEEL_SEGMENTS[segment_idx]
         self.wheel_result_timer = 5.0  # 5 Sekunden Ergebnis anzeigen
     
-    def _try_buy_perk(self):
-        """Versucht den ausgewählten Perk zu kaufen"""
-        perk = PERKS[self.perk_selected]
-        perks = load_perks()
-        current_level = perks.get(perk["id"], 0)
-        
-        if current_level >= perk["max_level"]:
-            return  # Schon maxed
-        
-        cost = perk["cost_per_level"][current_level]
+    def _try_buy_class(self):
+        """Kauft die ausgewählte Klasse (wenn gesperrt) oder wählt sie aus (wenn im Besitz)."""
+        preset = PIRATE_PRESETS[self.class_shop_selected]
+        cid = preset["id"]
+
+        # Bereits im Besitz -> als aktive Klasse auswählen
+        if cid in self.unlocked_pirates:
+            self.selected_pirate_idx = self.class_shop_selected
+            save_selected_pirate_id(cid)
+            self.perk_buy_flash[cid] = 0.5
+            if hasattr(self, 'sfx'):
+                self.sfx.play('menu_confirm')
+            return
+
+        # Noch gesperrt -> mit Gems kaufen
+        cost = preset.get("price", 0)
         gems = load_gems()
-        
         if gems >= cost:
-            # Kauf erfolgreich!
             gems -= cost
-            perks[perk["id"]] = current_level + 1
             save_gems(gems)
-            save_perks(perks)
-            self.perk_buy_flash[perk["id"]] = 0.5  # Flash-Animation
+            self.unlocked_pirates.add(cid)
+            save_unlocked_pirate_ids(self.unlocked_pirates)
+            # Gekaufte Klasse direkt aktivieren
+            self.selected_pirate_idx = self.class_shop_selected
+            save_selected_pirate_id(cid)
+            self.perk_buy_flash[cid] = 0.5  # Flash-Animation
             if hasattr(self, 'sfx'):
                 self.sfx.play('perk_buy')
         else:
@@ -1148,8 +1164,8 @@ class MenuState(State):
         
         if self.in_wheel:
             self._draw_wheel(s, w, h)
-        elif self.in_perk_shop:
-            self._draw_perk_shop(s, w, h)
+        elif self.in_class_shop:
+            self._draw_class_shop(s, w, h)
         elif self.in_settings:
             self._draw_settings(s, w, h)
         else:
@@ -1275,18 +1291,18 @@ class MenuState(State):
 
         boost_col = (120, 240, 180) if is_unlocked else (130, 130, 130)
         debuff_col = (255, 140, 140) if is_unlocked else (130, 130, 130)
-        boost_txt = self.font_perk_desc.render(f"Boost: {selected_pirate['boost']}", True, boost_col)
+        boost_txt = self.font_perk_desc.render(f"Boost: {class_boost_text(selected_pirate)}", True, boost_col)
         debuff_txt = self.font_perk_desc.render(f"Debuff: {selected_pirate['debuff']}", True, debuff_col)
         s.blit(boost_txt, (picker_x + 14, picker_y + 62))
         s.blit(debuff_txt, (picker_x + picker_w - debuff_txt.get_width() - 14, picker_y + 62))
 
         if not is_unlocked:
-            req = selected_pirate.get('unlock_req', 'Locked')
+            req = f"Locked - buy in Class Shop for {selected_pirate.get('price', 0)} Gems"
             req_surf = self.font_perk_desc.render(req, True, (255, 210, 130))
             s.blit(req_surf, (w // 2 - req_surf.get_width() // 2, picker_y + picker_h + 4))
             if self.pirate_lock_flash > 0:
                 pulse = abs(math.sin(self.timer * 12))
-                warn = self.font_small.render("Class locked: complete achievement first", True, (255, int(120 + 100 * pulse), int(120 + 100 * pulse)))
+                warn = self.font_small.render("Class locked - buy it in the Class Shop first", True, (255, int(120 + 100 * pulse), int(120 + 100 * pulse)))
                 s.blit(warn, (w // 2 - warn.get_width() // 2, picker_y + picker_h + 24))
 
         arrow_col = (255, 220, 100)
@@ -1419,122 +1435,98 @@ class MenuState(State):
         credits_surf = self.font_small.render(credits, True, (100, 120, 150))
         s.blit(credits_surf, (w - credits_surf.get_width() - 10, h - 30))
     
-    def _draw_perk_shop(self, s, w, h):
-        """Zeichnet den Perk-Shop"""
-        perks_data = load_perks()
+    def _draw_class_shop(self, s, w, h):
+        """Zeichnet den Klassen-Shop (Klassen kaufen & ausrüsten)"""
         gems = load_gems()
-        
+
         # Titel
-        title_surf = self.font_title.render("PERKS", True, (255, 220, 100))
-        shadow_surf = self.font_title.render("PERKS", True, (0, 0, 0))
+        title_surf = self.font_title.render("CLASS SHOP", True, (255, 220, 100))
+        shadow_surf = self.font_title.render("CLASS SHOP", True, (0, 0, 0))
         s.blit(shadow_surf, (w // 2 - title_surf.get_width() // 2 + 3, 33))
         s.blit(title_surf, (w // 2 - title_surf.get_width() // 2, 30))
-        
+
         # Gem-Counter oben
         self._draw_gem_counter(s, w, 105)
-        
-        # Perk-Liste
-        panel_w = min(550, w - 60)
-        panel_x = w // 2 - panel_w // 2
-        start_y = 140
-        item_h = 70
-        
-        for i, perk in enumerate(PERKS):
-            is_selected = i == self.perk_selected
-            current_level = perks_data.get(perk["id"], 0)
-            is_maxed = current_level >= perk["max_level"]
-            cost = perk["cost_per_level"][current_level] if not is_maxed else 0
-            can_afford = gems >= cost and not is_maxed
-            
-            item_y = start_y + i * (item_h + 8)
-            
+
+        rects = self._get_class_rects(w, h)
+        active_id = PIRATE_PRESETS[self.selected_pirate_idx]['id']
+
+        for i, preset in enumerate(PIRATE_PRESETS):
+            rect = rects[i]
+            item_h = rect.height
+            cid = preset["id"]
+            owned = cid in self.unlocked_pirates
+            is_active = (cid == active_id)
+            is_selected = (i == self.class_shop_selected)
+            cost = preset.get("price", 0)
+            can_afford = owned or gems >= cost
+
             # Hintergrund-Box
-            box_surf = pg.Surface((panel_w, item_h), pg.SRCALPHA)
-            
-            # Kauf-Flash
-            if perk["id"] in self.perk_buy_flash:
-                flash_t = self.perk_buy_flash[perk["id"]] / 0.5
-                flash_alpha = int(100 * flash_t)
-                pg.draw.rect(box_surf, (100, 255, 100, flash_alpha), (0, 0, panel_w, item_h), border_radius=10)
-            
+            box_surf = pg.Surface((rect.width, item_h), pg.SRCALPHA)
+            if cid in self.perk_buy_flash:
+                flash_t = self.perk_buy_flash[cid] / 0.5
+                pg.draw.rect(box_surf, (100, 255, 100, int(100 * flash_t)), (0, 0, rect.width, item_h), border_radius=10)
             if is_selected:
-                pg.draw.rect(box_surf, (30, 40, 70, 220), (0, 0, panel_w, item_h), border_radius=10)
+                pg.draw.rect(box_surf, (30, 40, 70, 220), (0, 0, rect.width, item_h), border_radius=10)
                 border_color = (255, 220, 100) if can_afford else (150, 150, 150)
-                pg.draw.rect(box_surf, border_color, (0, 0, panel_w, item_h), 3, border_radius=10)
+                pg.draw.rect(box_surf, border_color, (0, 0, rect.width, item_h), 3, border_radius=10)
             else:
-                pg.draw.rect(box_surf, (15, 25, 50, 200), (0, 0, panel_w, item_h), border_radius=10)
-                pg.draw.rect(box_surf, (60, 70, 100, 150), (0, 0, panel_w, item_h), 1, border_radius=10)
-            
-            s.blit(box_surf, (panel_x, item_y))
-            
-            # Icon (farbiger Kreis mit Symbol)
-            icon_x = panel_x + 35
-            icon_y = item_y + item_h // 2
-            icon_color = perk["icon_color"]
-            
-            # Glüh-Effekt für ausgewählt
+                pg.draw.rect(box_surf, (15, 25, 50, 200), (0, 0, rect.width, item_h), border_radius=10)
+                pg.draw.rect(box_surf, (60, 70, 100, 150), (0, 0, rect.width, item_h), 1, border_radius=10)
+            s.blit(box_surf, (rect.x, rect.y))
+
+            # Icon (farbiger Kreis, Schloss wenn gesperrt)
+            icon_x = rect.x + 30
+            icon_y = rect.y + item_h // 2
+            icon_color = preset["boost_color"]
             if is_selected:
-                glow_surf = pg.Surface((50, 50), pg.SRCALPHA)
-                pg.draw.circle(glow_surf, (*icon_color, 60), (25, 25), 25)
-                s.blit(glow_surf, (icon_x - 25, icon_y - 25))
-            
-            pg.draw.circle(s, icon_color, (icon_x, icon_y), 18)
-            pg.draw.circle(s, (255, 255, 255), (icon_x, icon_y), 18, 2)
-            
-            # Level-Nummer im Icon
-            lvl_surf = self.font_small.render(str(current_level), True, (255, 255, 255))
-            s.blit(lvl_surf, (icon_x - lvl_surf.get_width() // 2, icon_y - lvl_surf.get_height() // 2))
-            
-            # Perk-Name
-            name_color = (255, 255, 255) if not is_maxed else (100, 255, 100)
-            name_surf = self.font_perk.render(perk["name"], True, name_color)
-            s.blit(name_surf, (panel_x + 65, item_y + 10))
-            
-            # Beschreibung
-            desc_surf = self.font_perk_desc.render(perk["description"], True, (180, 190, 220))
-            s.blit(desc_surf, (panel_x + 65, item_y + 36))
-            
-            # Level-Balken (rechts)
-            bar_x = panel_x + panel_w - 180
-            bar_y = item_y + 12
-            for lvl in range(perk["max_level"]):
-                pip_x = bar_x + lvl * 22
-                pip_w = 18
-                pip_h = 14
-                if lvl < current_level:
-                    pg.draw.rect(s, icon_color, (pip_x, bar_y, pip_w, pip_h), border_radius=3)
-                    pg.draw.rect(s, (255, 255, 255, 150), (pip_x, bar_y, pip_w, pip_h), 1, border_radius=3)
-                else:
-                    pg.draw.rect(s, (40, 50, 70), (pip_x, bar_y, pip_w, pip_h), border_radius=3)
-                    pg.draw.rect(s, (80, 90, 110), (pip_x, bar_y, pip_w, pip_h), 1, border_radius=3)
-            
-            # Kosten / MAX Anzeige (rechts unten)
-            if is_maxed:
-                max_surf = self.font_perk_desc.render("MAX", True, (100, 255, 100))
-                s.blit(max_surf, (panel_x + panel_w - 50, item_y + 42))
+                glow = pg.Surface((44, 44), pg.SRCALPHA)
+                pg.draw.circle(glow, (*icon_color, 60), (22, 22), 22)
+                s.blit(glow, (icon_x - 22, icon_y - 22))
+            pg.draw.circle(s, icon_color, (icon_x, icon_y), 15)
+            pg.draw.circle(s, (255, 255, 255), (icon_x, icon_y), 15, 2)
+            if not owned:
+                pg.draw.circle(s, (30, 30, 45), (icon_x, icon_y - 2), 5, 2)
+                pg.draw.rect(s, (30, 30, 45), (icon_x - 5, icon_y, 10, 8), border_radius=2)
+
+            # Name
+            name_color = (255, 255, 255) if owned else (205, 210, 225)
+            name_surf = self.font_perk.render(preset["name"], True, name_color)
+            s.blit(name_surf, (rect.x + 56, rect.y + 6))
+
+            # Boost / Debuff (unten links) inkl. Defense/Evasion als normale Stats
+            stat_txt = f"{class_boost_text(preset)}  |  {preset['debuff']}"
+            stat_surf = self.font_perk_desc.render(stat_txt, True, (170, 200, 185))
+            s.blit(stat_surf, (rect.x + 56, rect.y + item_h - 25))
+
+            # Rechts: Status oder Preis
+            if is_active:
+                tag = self.font_perk_desc.render("ACTIVE", True, (100, 255, 130))
+                s.blit(tag, (rect.right - tag.get_width() - 16, icon_y - tag.get_height() // 2))
+            elif owned:
+                tag = self.font_perk_desc.render("OWNED", True, (150, 200, 255))
+                s.blit(tag, (rect.right - tag.get_width() - 16, icon_y - tag.get_height() // 2))
             else:
                 cost_color = (255, 220, 100) if can_afford else (200, 80, 80)
-                cost_text = f"{cost}"
-                cost_surf = self.font_perk_desc.render(cost_text, True, cost_color)
-                # Kleines Gem-Symbol vor Kosten
-                gem_x = panel_x + panel_w - 70
-                gem_y = item_y + 44
-                mini_gem = [(gem_x, gem_y + 4), (gem_x + 5, gem_y), (gem_x + 10, gem_y + 4), (gem_x + 5, gem_y + 10)]
+                cost_surf = self.font_perk.render(f"{cost}", True, cost_color)
+                gx = rect.right - cost_surf.get_width() - 32
+                gy = icon_y - 5
+                mini_gem = [(gx, gy + 5), (gx + 6, gy), (gx + 12, gy + 5), (gx + 6, gy + 11)]
                 pg.draw.polygon(s, (255, 220, 50), mini_gem)
-                s.blit(cost_surf, (gem_x + 14, item_y + 40))
-        
-        # Error-Flash ("Nicht genug Gems!")
+                s.blit(cost_surf, (gx + 18, icon_y - cost_surf.get_height() // 2))
+
+        # Error-Flash ("Not enough Gems!")
         if self.perk_error_flash > 0:
             error_alpha = min(255, int(self.perk_error_flash * 255))
             error_surf = self.font_menu.render("Not enough Gems!", True, (255, 80, 80))
             error_bg = pg.Surface((error_surf.get_width() + 30, error_surf.get_height() + 10), pg.SRCALPHA)
             pg.draw.rect(error_bg, (80, 0, 0, min(200, error_alpha)), (0, 0, error_bg.get_width(), error_bg.get_height()), border_radius=8)
-            s.blit(error_bg, (w // 2 - error_bg.get_width() // 2, h - 110))
+            s.blit(error_bg, (w // 2 - error_bg.get_width() // 2, h - 108))
             error_surf.set_alpha(error_alpha)
-            s.blit(error_surf, (w // 2 - error_surf.get_width() // 2, h - 105))
-        
+            s.blit(error_surf, (w // 2 - error_surf.get_width() // 2, h - 103))
+
         # Steuerungshinweise
-        controls = "W/S / Mouse = Select   ENTER / Click = Buy   ESC = Back"
+        controls = "W/S / Mouse = Select   ENTER / Click = Buy or Equip   ESC = Back"
         ctrl_surf = self.font_small.render(controls, True, (150, 170, 200))
         s.blit(ctrl_surf, (w // 2 - ctrl_surf.get_width() // 2, h - 40))
     
@@ -2029,102 +2021,58 @@ class MenuState(State):
         close_surf.set_alpha(close_alpha)
         s.blit(close_surf, (w // 2 - close_surf.get_width() // 2, box_y + box_h - 35))
 
+    def _load_pirate_frames(self, scale=2):
+        """Loads and cleans the pirate idle frames from the sprite sheet."""
+        try:
+            sheet = pg.image.load("assets/pirate.png").convert()
+        except Exception:
+            traceback.print_exc()
+            return []
+        bg = sheet.get_at((sheet.get_width() // 2, 2))  # background swatch
+        lefts, top, cw, ch = (165, 251, 336, 422), 548, 86, 88
+        frames = []
+        for lx in lefts:
+            cell = pg.Surface((cw, ch), pg.SRCALPHA)
+            cell.blit(sheet, (0, 0), pg.Rect(lx, top, cw, ch))
+            # Key out the grey background AND its soft drop-shadow (tolerance)
+            cell.lock()
+            for y in range(ch):
+                for x in range(cw):
+                    r, g, b, _ = cell.get_at((x, y))
+                    if abs(r - bg[0]) + abs(g - bg[1]) + abs(b - bg[2]) < 78:
+                        cell.set_at((x, y), (0, 0, 0, 0))
+            cell.unlock()
+            bb = cell.get_bounding_rect()
+            if bb.width == 0:
+                continue
+            frame = pg.Surface(bb.size, pg.SRCALPHA)
+            frame.blit(cell, (0, 0), bb)
+            frame = pg.transform.scale(frame, (bb.width * scale, bb.height * scale))
+            frames.append(frame)
+        return frames
+
     def _draw_pirate(self, surface, cx, cy, scale=1.0, bob_offset=0.0):
-        """Draws a pirate character (pixel art style)"""
-        s = scale
+        """Draws the pirate using the real game sprite (animated idle)."""
+        frames = getattr(self, "pirate_frames", None)
+        if not frames:
+            raise RuntimeError("no pirate frames")
+
+        # Frames are already scaled by an integer factor for crisp pixels;
+        # the `scale` argument is intentionally ignored to avoid blurry
+        # non-integer resampling.
+        idx = int(self.farewell_timer * 4) % len(frames)
+        frame = frames[idx]
+        fw, fh = frame.get_width(), frame.get_height()
         yo = int(bob_offset)
 
-        # Hat
-        hat_color = (40, 30, 25)
-        hat_band = (180, 150, 60)
-        pg.draw.ellipse(surface, hat_color,
-                        (int(cx - 28 * s), int(cy - 52 * s + yo), int(56 * s), int(22 * s)))
-        pg.draw.rect(surface, hat_color,
-                     (int(cx - 16 * s), int(cy - 68 * s + yo), int(32 * s), int(24 * s)), border_radius=int(6 * s))
-        pg.draw.rect(surface, hat_band,
-                     (int(cx - 16 * s), int(cy - 48 * s + yo), int(32 * s), int(5 * s)))
-        # Skull on hat
-        pg.draw.circle(surface, (220, 220, 210), (int(cx), int(cy - 58 * s + yo)), int(5 * s))
-        pg.draw.circle(surface, hat_color, (int(cx - 2 * s), int(cy - 59 * s + yo)), int(1.5 * s))
-        pg.draw.circle(surface, hat_color, (int(cx + 2 * s), int(cy - 59 * s + yo)), int(1.5 * s))
+        # Soft ground shadow
+        shadow = pg.Surface((int(fw * 0.7), int(fh * 0.16)), pg.SRCALPHA)
+        pg.draw.ellipse(shadow, (0, 0, 0, 90), shadow.get_rect())
+        surface.blit(shadow, (int(cx - fw * 0.35), int(cy + fh * 0.42)))
 
-        # Head
-        skin = (210, 170, 120)
-        pg.draw.circle(surface, skin, (int(cx), int(cy - 28 * s + yo)), int(18 * s))
+        # Center the sprite on (cx, cy); feet sit near cy + fh/2
+        surface.blit(frame, (int(cx - fw / 2), int(cy - fh / 2 + yo)))
 
-        # Eye patch
-        pg.draw.circle(surface, (30, 30, 30), (int(cx - 6 * s), int(cy - 30 * s + yo)), int(5 * s))
-        pg.draw.line(surface, (30, 30, 30),
-                     (int(cx - 6 * s), int(cy - 35 * s + yo)),
-                     (int(cx + 10 * s), int(cy - 46 * s + yo)), int(2 * s))
-
-        # Right eye
-        pg.draw.circle(surface, (255, 255, 255), (int(cx + 7 * s), int(cy - 30 * s + yo)), int(4 * s))
-        pg.draw.circle(surface, (40, 30, 20), (int(cx + 7 * s), int(cy - 30 * s + yo)), int(2 * s))
-
-        # Grin
-        pg.draw.arc(surface, (180, 80, 40),
-                    (int(cx - 8 * s), int(cy - 24 * s + yo), int(16 * s), int(10 * s)),
-                    3.4, 6.0, int(2 * s))
-        # Gold tooth
-        pg.draw.rect(surface, (255, 210, 50),
-                     (int(cx + 1 * s), int(cy - 19 * s + yo), int(3 * s), int(3 * s)))
-
-        # Beard
-        beard_color = (60, 40, 25)
-        for i in range(5):
-            bx = int(cx + (i - 2) * 5 * s)
-            by = int(cy - 14 * s + yo)
-            pg.draw.line(surface, beard_color, (bx, by),
-                         (bx + random.randint(-2, 2), by + int(12 * s) + random.randint(-2, 2)), int(2 * s))
-
-        # Body (coat)
-        coat_color = (120, 30, 30)
-        pg.draw.rect(surface, coat_color,
-                     (int(cx - 16 * s), int(cy - 8 * s + yo), int(32 * s), int(36 * s)),
-                     border_radius=int(4 * s))
-        # Buttons
-        for by in range(3):
-            pg.draw.circle(surface, (220, 190, 60),
-                           (int(cx), int(cy + (2 + by * 10) * s + yo)), int(2.5 * s))
-
-        # Belt
-        pg.draw.rect(surface, (60, 40, 20),
-                     (int(cx - 18 * s), int(cy + 18 * s + yo), int(36 * s), int(6 * s)))
-        pg.draw.rect(surface, (220, 190, 60),
-                     (int(cx - 4 * s), int(cy + 18 * s + yo), int(8 * s), int(6 * s)),
-                     border_radius=int(1 * s))
-
-        # Arms
-        arm_color = coat_color
-        pg.draw.line(surface, arm_color,
-                     (int(cx - 16 * s), int(cy - 2 * s + yo)),
-                     (int(cx - 30 * s), int(cy + 20 * s + yo)), int(6 * s))
-        pg.draw.circle(surface, skin, (int(cx - 30 * s), int(cy + 22 * s + yo)), int(4 * s))
-
-        # Waving arm
-        wave_angle = math.sin(self.farewell_timer * 4) * 0.4
-        arm_end_x = int(cx + 30 * s + math.sin(wave_angle) * 10 * s)
-        arm_end_y = int(cy - 20 * s + yo + math.cos(wave_angle) * 5 * s)
-        pg.draw.line(surface, arm_color,
-                     (int(cx + 16 * s), int(cy - 2 * s + yo)),
-                     (arm_end_x, arm_end_y), int(6 * s))
-        pg.draw.circle(surface, skin, (arm_end_x, arm_end_y - int(2 * s)), int(5 * s))
-
-        # Legs
-        pg.draw.rect(surface, (50, 40, 35),
-                     (int(cx - 12 * s), int(cy + 28 * s + yo), int(10 * s), int(18 * s)),
-                     border_radius=int(2 * s))
-        pg.draw.rect(surface, (50, 40, 35),
-                     (int(cx + 2 * s), int(cy + 28 * s + yo), int(10 * s), int(18 * s)),
-                     border_radius=int(2 * s))
-        # Boots
-        pg.draw.rect(surface, (35, 25, 15),
-                     (int(cx - 14 * s), int(cy + 42 * s + yo), int(14 * s), int(6 * s)),
-                     border_radius=int(2 * s))
-        pg.draw.rect(surface, (35, 25, 15),
-                     (int(cx + 0 * s), int(cy + 42 * s + yo), int(14 * s), int(6 * s)),
-                     border_radius=int(2 * s))
 
     def _draw_pirate_farewell(self, surface, w, h):
         """Draws the pirate farewell dialog over the menu"""
@@ -2133,9 +2081,9 @@ class MenuState(State):
         overlay.fill((0, 0, 0, 160))
         surface.blit(overlay, (0, 0))
 
-        # Pirate position
-        pirate_x = w // 2 - 80
-        pirate_y = h // 2 + 60
+        # Pirate position (left of the dialog, clear of the buttons)
+        pirate_x = w // 2 - 150
+        pirate_y = h // 2 + 20
         bob = math.sin(self.farewell_timer * 2) * 3
 
         # Draw pirate
@@ -2151,8 +2099,8 @@ class MenuState(State):
         bubble_h = 100
         bubble_x = w // 2 - 20
         bubble_y = h // 2 - 80
-        tail_x = pirate_x + 30
-        tail_y = pirate_y - 60 + int(bob)
+        tail_x = pirate_x + 25
+        tail_y = pirate_y - 50 + int(bob)
 
         # Draw bubble
         bubble = pg.Surface((bubble_w, bubble_h), pg.SRCALPHA)
@@ -2185,7 +2133,7 @@ class MenuState(State):
         btn_gap = 20
         total_w = btn_w * 2 + btn_gap
         btn_start_x = w // 2 - total_w // 2 + 40
-        btn_y = h // 2 + 120
+        btn_y = h // 2 + 130
 
         farewell_buttons = [
             ("I'll stay!", (40, 130, 70), (60, 190, 90)),

@@ -19,7 +19,7 @@ from states.profile import ProfileState
 from circle_collision import CircleCollisionState
 
 pg.display.set_caption("Pirates")
-screen = pg.display.set_mode((960, 540), pg.RESIZABLE)
+screen = pg.display.set_mode((0, 0), pg.FULLSCREEN | pg.RESIZABLE)
 
 sm = StateManager({"play": PlayState(), "pause": PauseState(), "menu": MenuState(), "profile": ProfileState()}, start="menu")
 

@@ -7,3 +7,5 @@ dist
 build
 
 /*.pyc
+# lokaler Spielstand
+gems_save.json

@@ -24,6 +24,8 @@ PIRATE_PRESETS = {
         'speed_mult': 1.0,
         'repair_mult': 1.10,
         'reload_mult': 1.0,
+        'defense': 0.05,
+        'evasion': 0.05,
     },
     'berserker': {
         'name': 'Berserker Raider',
@@ -32,6 +34,8 @@ PIRATE_PRESETS = {
         'speed_mult': 1.0,
         'repair_mult': 1.0,
         'reload_mult': 1.0,
+        'defense': 0.0,
+        'evasion': 0.0,
     },
     'navigator': {
         'name': 'Storm Navigator',
@@ -40,6 +44,8 @@ PIRATE_PRESETS = {
         'speed_mult': 1.18,
         'repair_mult': 1.0,
         'reload_mult': 1.15,
+        'defense': 0.0,
+        'evasion': 0.15,
     },
     'engineer': {
         'name': 'Iron Engineer',
@@ -48,6 +54,8 @@ PIRATE_PRESETS = {
         'speed_mult': 0.90,
         'repair_mult': 1.0,
         'reload_mult': 1.0,
+        'defense': 0.15,
+        'evasion': 0.0,
     },
     'reaper': {
         'name': 'Reaper Corsair',
@@ -56,6 +64,8 @@ PIRATE_PRESETS = {
         'speed_mult': 1.0,
         'repair_mult': 1.0,
         'reload_mult': 1.0,
+        'defense': 0.0,
+        'evasion': 0.05,
     },
     'old_salt': {
         'name': 'Old Salt Veteran',
@@ -64,6 +74,48 @@ PIRATE_PRESETS = {
         'speed_mult': 1.0,
         'repair_mult': 1.25,
         'reload_mult': 1.0,
+        'defense': 0.10,
+        'evasion': 0.05,
+    },
+    'gunslinger': {
+        'name': 'Quickdraw Gunner',
+        'max_hp_mult': 1.0,
+        'damage_mult': 0.90,
+        'speed_mult': 1.0,
+        'repair_mult': 1.0,
+        'reload_mult': 0.75,
+        'defense': 0.0,
+        'evasion': 0.08,
+    },
+    'juggernaut': {
+        'name': 'Juggernaut',
+        'max_hp_mult': 1.40,
+        'damage_mult': 0.95,
+        'speed_mult': 0.82,
+        'repair_mult': 1.0,
+        'reload_mult': 1.0,
+        'defense': 0.25,
+        'evasion': 0.0,
+    },
+    'duelist': {
+        'name': 'Sea Duelist',
+        'max_hp_mult': 0.90,
+        'damage_mult': 1.12,
+        'speed_mult': 1.12,
+        'repair_mult': 1.0,
+        'reload_mult': 1.0,
+        'defense': 0.05,
+        'evasion': 0.12,
+    },
+    'warlord': {
+        'name': 'Dread Warlord',
+        'max_hp_mult': 1.15,
+        'damage_mult': 1.25,
+        'speed_mult': 1.05,
+        'repair_mult': 0.85,
+        'reload_mult': 1.0,
+        'defense': 0.12,
+        'evasion': 0.08,
     },
 }
 
@@ -84,7 +136,7 @@ ACHIEVEMENTS = [
         'type': 'kills',
         'target': 1000,
         'reward_gems': 25,
-        'unlock_pirate': 'reaper',
+        'unlock_pirate': None,
     },
     {
         'id': 'play_60_min',
@@ -93,7 +145,7 @@ ACHIEVEMENTS = [
         'type': 'playtime',
         'target': 3600,
         'reward_gems': 20,
-        'unlock_pirate': 'old_salt',
+        'unlock_pirate': None,
     },
     {
         'id': 'kill_5000',
@@ -272,10 +324,11 @@ class DamageNumber:
             cls._font = pg.font.SysFont("Arial", 24, bold=True)
         return cls._font
     
-    def __init__(self, pos, damage, color=(255, 50, 50)):
+    def __init__(self, pos, damage, color=(255, 50, 50), text=None):
         self.pos = pg.Vector2(pos)
         self.damage = damage
         self.color = color
+        self.text = text  # Optionaler Text (z.B. "MISS") statt einer Zahl
         self.lifetime = 1.0
         self.max_lifetime = 1.0
         self.velocity = pg.Vector2(random.uniform(-20, 20), -80)
@@ -293,13 +346,14 @@ class DamageNumber:
             return
         screen_pos = self.pos - offset
         font = DamageNumber._get_font()
-        
+        label = self.text if self.text is not None else str(int(self.damage))
+
         # Schatten
-        shadow_text = font.render(str(int(self.damage)), True, (0, 0, 0))
+        shadow_text = font.render(label, True, (0, 0, 0))
         surface.blit(shadow_text, (int(screen_pos.x) + 2, int(screen_pos.y) + 2))
-        
+
         # Text
-        text = font.render(str(int(self.damage)), True, self.color)
+        text = font.render(label, True, self.color)
         surface.blit(text, (int(screen_pos.x), int(screen_pos.y)))
 
 
@@ -321,7 +375,9 @@ class CrewMember:
         self.max_health = self.ROLES[role]['health']
         self.is_alive = True
         self.damage_percentage = 0  # 0-100
-    
+        self.name = self.ROLES[role]['name']
+        self.level = 1  # 1=Green, 2=Veteran, 3=Master
+
     def take_damage(self, amount):
         """Nimmt Schaden"""
         if not self.is_alive:
@@ -360,7 +416,10 @@ class ShipCrew:
         self.navigator = CrewMember('navigator')
         self.engineer = CrewMember('engineer')
         self.boatswain = CrewMember('boatswain')
-        
+
+        # Rekrutierte Reserve-Crew (auf Inseln angeheuert)
+        self.reserves = []  # list[CrewMember]
+
         # Ersatz-Timer
         self.driver_replacement_timer = 0
         self.driver_replacement_duration = 3.0  # 3 Sekunden zum Ersetzen
@@ -390,8 +449,19 @@ class ShipCrew:
         """Prüft ob Driver am Leben ist"""
         return self.driver.is_alive
     
+    def add_recruit(self, role, level=1, name=None):
+        """Fügt eine auf einer Insel angeheuerte Person zur Reserve hinzu."""
+        m = CrewMember(role)
+        m.level = level
+        if name:
+            m.name = name
+        self.reserves.append(m)
+        return m
+
     def has_replacement_available(self):
-        """Prüft ob jemand eine kritische Rolle ersetzen kann"""
+        """Prüft ob ein Ersatz verfügbar ist (Reserve-Crew oder lebende Support-Rolle)."""
+        if self.reserves:
+            return True
         return any(member.is_alive for role, member in self.get_members() if role in ('loader', 'navigator', 'engineer', 'boatswain'))
 
     def has_driver_replacement_available(self):
@@ -415,6 +485,8 @@ class ShipCrew:
                 self.driver.is_alive = True
                 self.driver.health = self.driver.max_health
                 self.driver.damage_percentage = 0
+                if self.reserves:
+                    self.reserves.pop(0)
                 self.driver_needs_replacement = False
                 self.driver_replacement_timer = 0
                 return True
@@ -433,6 +505,8 @@ class ShipCrew:
                 self.gunner.is_alive = True
                 self.gunner.health = self.gunner.max_health
                 self.gunner.damage_percentage = 0
+                if self.reserves:
+                    self.reserves.pop(0)
                 self.gunner_needs_replacement = False
                 self.gunner_replacement_timer = 0
                 return True
@@ -499,119 +573,180 @@ class ShipCrew:
             surface.blit(progress_text, (hud_x + 120, hud_y + 8))
     
     def draw_ship_model(self, surface, width, height):
-        """Zeichnet ein detailliertes War-Thunder ähnliches Schiff-Modell im War-Thunder Stil"""
-        # Größerer Model-Bereich
+        """Schadensmodell: zeigt direkt am Schiff, welche Systeme intakt/beschaedigt/zerstoert sind."""
         model_x = width - 130
         model_y = 145
-        
-        # Große Hintergrund-Box mit Gradienten-Effekt
-        box_width = 120
-        box_height = 180
-        pg.draw.rect(surface, (20, 25, 45), (model_x - 60, model_y - 20, box_width, box_height))
-        pg.draw.rect(surface, (80, 120, 160), (model_x - 60, model_y - 20, box_width, box_height), 2)
-        
-        # Schiff zeichnen - Detaillierte Top-Down-Ansicht
-        center_x = model_x
-        center_y = model_y + 40
-        
-        # Äußerer Rumpf (dunkles Blau)
-        rumpf_outer = [
-            (center_x - 28, center_y - 50),   # Bug - zugespitzt
-            (center_x - 22, center_y - 35),
-            (center_x - 20, center_y - 15),
-            (center_x - 18, center_y),
-            (center_x - 18, center_y + 35),   
-            (center_x - 20, center_y + 45),   
-            (center_x - 15, center_y + 55),   # Heck-Bereich
-            (center_x + 15, center_y + 55),
-            (center_x + 20, center_y + 45),
-            (center_x + 18, center_y + 35),
-            (center_x + 18, center_y),
-            (center_x + 20, center_y - 15),
-            (center_x + 22, center_y - 35),
-            (center_x + 28, center_y - 50)    # Bug
-        ]
-        pg.draw.polygon(surface, (40, 80, 150), rumpf_outer)
-        pg.draw.polygon(surface, (100, 150, 220), rumpf_outer, 2)
-        
-        # Innerer Rumpf - Deck (helleres Blau)
-        deck_inner = [
-            (center_x - 22, center_y - 45),
-            (center_x - 16, center_y - 30),
-            (center_x - 14, center_y + 25),
-            (center_x - 12, center_y + 50),
-            (center_x + 12, center_y + 50),
-            (center_x + 14, center_y + 25),
-            (center_x + 16, center_y - 30),
-            (center_x + 22, center_y - 45)
-        ]
-        pg.draw.polygon(surface, (70, 120, 180), deck_inner)
-        
-        # ===== DETAILLIERTE KANONEN-TÜRME =====
-        # Vordere Kanonen (Port - Linke Seite)
-        pg.draw.circle(surface, (100, 80, 50), (center_x - 12, center_y - 25), 6)  # Turm
-        pg.draw.line(surface, (200, 150, 80), (center_x - 12, center_y - 25), (center_x - 18, center_y - 35), 3)  # Kanone
-        
-        # Vordere Kanonen (Starboard - Rechte Seite)
-        pg.draw.circle(surface, (100, 80, 50), (center_x + 12, center_y - 25), 6)  # Turm
-        pg.draw.line(surface, (200, 150, 80), (center_x + 12, center_y - 25), (center_x + 18, center_y - 35), 3)  # Kanone
-        
-        # Mittlere Kanonen
-        pg.draw.circle(surface, (90, 70, 40), (center_x - 10, center_y + 5), 5)
-        pg.draw.line(surface, (180, 130, 70), (center_x - 10, center_y + 5), (center_x - 16, center_y + 10), 2)
-        
-        pg.draw.circle(surface, (90, 70, 40), (center_x + 10, center_y + 5), 5)
-        pg.draw.line(surface, (180, 130, 70), (center_x + 10, center_y + 5), (center_x + 16, center_y + 10), 2)
-        
-        # Hintere Kanonen
-        pg.draw.circle(surface, (80, 60, 30), (center_x - 8, center_y + 35), 4)
-        pg.draw.line(surface, (160, 110, 60), (center_x - 8, center_y + 35), (center_x - 12, center_y + 45), 1)
-        
-        pg.draw.circle(surface, (80, 60, 30), (center_x + 8, center_y + 35), 4)
-        pg.draw.line(surface, (160, 110, 60), (center_x + 8, center_y + 35), (center_x + 12, center_y + 45), 1)
-        
-        # ===== AUFBAUTEN =====
-        # Kommandostand (Brücke)
-        pg.draw.rect(surface, (120, 100, 70), (center_x - 8, center_y - 12, 16, 20))
-        pg.draw.rect(surface, (160, 140, 100), (center_x - 8, center_y - 12, 16, 20), 1)
-        
-        # Mast (zentral)
-        pg.draw.line(surface, (180, 180, 180), (center_x, center_y - 20), (center_x, center_y + 45), 2)
-        
-        # Mastspitze und Radaranlage
-        pg.draw.circle(surface, (200, 200, 0), (center_x, center_y - 20), 3)
-        
-        # Funkanlage (kleine Antennen)
-        pg.draw.line(surface, (150, 150, 150), (center_x - 3, center_y - 18), (center_x - 8, center_y - 25), 1)
-        pg.draw.line(surface, (150, 150, 150), (center_x + 3, center_y - 18), (center_x + 8, center_y - 25), 1)
-        
-        # ===== BESCHÄDIGUNG VISUELL DARSTELLEN =====
-        # Rauchwolke basierend auf Crew-Gesamtzustand
-        members = [member for _role, member in self.get_members()]
-        crew_ratio = sum(member.health / max(1, member.max_health) for member in members) / max(1, len(members))
-        damage_ratio = 1.0 - crew_ratio
-        if damage_ratio > 0.5:
-            smoke_alpha = int(100 * min(1.0, (damage_ratio - 0.5) * 2))
-            smoke_color = (100, 100, 100, smoke_alpha)
-            pg.draw.circle(surface, smoke_color[:3], (center_x - 5, center_y - 40), 5)
-            pg.draw.circle(surface, smoke_color[:3], (center_x + 5, center_y - 38), 4)
 
-        # ===== CREW IM DAMAGE MODELL =====
-        crew_stations = [
-            (self.driver, "D", center_x, center_y + 6),
-            (self.gunner, "G", center_x - 16, center_y - 8),
-            (self.loader, "L", center_x + 16, center_y - 8),
-            (self.navigator, "N", center_x - 12, center_y + 25),
-            (self.engineer, "E", center_x + 12, center_y + 25),
-            (self.boatswain, "B", center_x, center_y + 38),
+        box_width = 120
+        box_height = 205
+        box_left = model_x - 60
+        box_top = model_y - 22
+        pg.draw.rect(surface, (18, 22, 38), (box_left, box_top, box_width, box_height), border_radius=4)
+        pg.draw.rect(surface, (80, 120, 160), (box_left, box_top, box_width, box_height), 2, border_radius=4)
+
+        font_title = pg.font.SysFont("Arial", 13, bold=True)
+        font_tag = pg.font.SysFont("Arial", 9, bold=True)
+        font_status = pg.font.SysFont("Arial", 12, bold=True)
+
+        title = font_title.render("DAMAGE MODEL", True, (120, 200, 255))
+        surface.blit(title, (box_left + box_width // 2 - title.get_width() // 2, box_top + 4))
+
+        center_x = model_x
+        center_y = model_y + 52
+        t = pg.time.get_ticks() * 0.001
+
+        # ----- Hilfsfunktionen -----
+        def lerp(c1, c2, f):
+            f = max(0.0, min(1.0, f))
+            return (int(c1[0] + (c2[0] - c1[0]) * f),
+                    int(c1[1] + (c2[1] - c1[1]) * f),
+                    int(c1[2] + (c2[2] - c1[2]) * f))
+
+        def state_color(member):
+            """Gruen (intakt) -> Gelb -> Rot (kritisch); Grau wenn zerstoert."""
+            if not member.is_alive:
+                return (60, 60, 66)
+            ratio = max(0.0, min(1.0, member.health / max(1, member.max_health)))
+            if ratio > 0.5:
+                return lerp((255, 210, 0), (0, 220, 0), (ratio - 0.5) * 2)
+            return lerp((225, 40, 40), (255, 210, 0), ratio * 2)
+
+        def mark_x(cx, cy, r):
+            pg.draw.line(surface, (235, 45, 45), (cx - r, cy - r), (cx + r, cy + r), 2)
+            pg.draw.line(surface, (235, 45, 45), (cx - r, cy + r), (cx + r, cy - r), 2)
+
+        def smoke(cx, cy):
+            # aufsteigender Rauch fuer zerstoerte Bauteile
+            for i in range(3):
+                ph = (t * 1.4 + i * 0.33) % 1.0
+                sy = int(cy - ph * 22)
+                sx = cx + int(math.sin(t * 4 + i * 2) * 4)
+                rad = int(2 + ph * 5)
+                shade = max(30, int(110 - ph * 70))
+                pg.draw.circle(surface, (shade, shade, shade), (sx, sy), rad)
+
+        def tag(text, cx, cy, member):
+            col = (235, 80, 80) if not member.is_alive else (170, 190, 210)
+            lbl = font_tag.render(text, True, col)
+            surface.blit(lbl, (cx - lbl.get_width() // 2, cy))
+
+        # ----- Rumpf (Boatswain) -----
+        rumpf_outer = [
+            (center_x - 28, center_y - 50), (center_x - 22, center_y - 35),
+            (center_x - 20, center_y - 15), (center_x - 18, center_y),
+            (center_x - 18, center_y + 35), (center_x - 20, center_y + 45),
+            (center_x - 15, center_y + 55), (center_x + 15, center_y + 55),
+            (center_x + 20, center_y + 45), (center_x + 18, center_y + 35),
+            (center_x + 18, center_y), (center_x + 20, center_y - 15),
+            (center_x + 22, center_y - 35), (center_x + 28, center_y - 50),
         ]
-        font_tiny = pg.font.SysFont("Arial", 10, bold=True)
-        for member, label, px, py in crew_stations:
-            station_color = member.get_color() if member.is_alive else (0, 0, 0)
-            pg.draw.circle(surface, station_color, (px, py), 5)
-            pg.draw.circle(surface, (200, 200, 200), (px, py), 5, 1)
-            lbl = font_tiny.render(label, True, (240, 240, 240))
-            surface.blit(lbl, (px - lbl.get_width() // 2, py - 15))
+        hull = self.boatswain
+        hr = hull.health / max(1, hull.max_health)
+        if hull.is_alive:
+            hull_fill = lerp((120, 50, 50), (45, 80, 140), hr)
+            hull_edge = lerp((210, 80, 80), (110, 160, 230), hr)
+        else:
+            hull_fill = (40, 32, 32)
+            hull_edge = (170, 55, 55)
+        pg.draw.polygon(surface, hull_fill, rumpf_outer)
+        pg.draw.polygon(surface, hull_edge, rumpf_outer, 2)
+
+        deck_inner = [
+            (center_x - 22, center_y - 45), (center_x - 16, center_y - 30),
+            (center_x - 14, center_y + 25), (center_x - 12, center_y + 50),
+            (center_x + 12, center_y + 50), (center_x + 14, center_y + 25),
+            (center_x + 16, center_y - 30), (center_x + 22, center_y - 45),
+        ]
+        deck_col = lerp((70, 60, 55), (70, 110, 165), hr if hull.is_alive else 0.0)
+        pg.draw.polygon(surface, deck_col, deck_inner)
+
+        if not hull.is_alive:
+            # Wasserlinie-Loecher + Rauch wenn der Rumpf zerstoert ist
+            for hx, hy in [(-12, -10), (10, 15), (-8, 38), (6, -28)]:
+                pg.draw.circle(surface, (15, 12, 12), (center_x + hx, center_y + hy), 4)
+            smoke(center_x - 16, center_y + 30)
+
+        # ----- Kanonen (Gunner) -----
+        gc = state_color(self.gunner)
+        for tx in (center_x - 12, center_x + 12):
+            pg.draw.circle(surface, gc, (tx, center_y - 25), 6)
+            pg.draw.circle(surface, (15, 15, 15), (tx, center_y - 25), 6, 1)
+            bx = tx + (7 if tx > center_x else -7)
+            barrel_col = (40, 40, 40) if self.gunner.is_alive else (75, 75, 75)
+            pg.draw.line(surface, barrel_col, (tx, center_y - 25), (bx, center_y - 35), 3)
+        if not self.gunner.is_alive:
+            mark_x(center_x - 12, center_y - 25, 6)
+            mark_x(center_x + 12, center_y - 25, 6)
+            smoke(center_x, center_y - 28)
+        tag("GUNS", center_x, center_y - 49, self.gunner)
+
+        # ----- Bruecke / Radar (Navigator) -----
+        nc = state_color(self.navigator)
+        bridge = pg.Rect(center_x - 9, center_y - 14, 18, 20)
+        pg.draw.rect(surface, nc, bridge, border_radius=2)
+        pg.draw.rect(surface, (15, 15, 15), bridge, 1, border_radius=2)
+        mast_col = (190, 190, 190) if self.navigator.is_alive else (80, 80, 80)
+        pg.draw.line(surface, mast_col, (center_x, center_y - 14), (center_x, center_y - 24), 2)
+        pg.draw.circle(surface, (210, 210, 0) if self.navigator.is_alive else (70, 70, 70), (center_x, center_y - 24), 2)
+        if not self.navigator.is_alive:
+            mark_x(center_x, center_y - 4, 8)
+            smoke(center_x, center_y - 8)
+        tag("BRG", center_x + 22, center_y - 12, self.navigator)
+
+        # ----- Munition (Loader) -----
+        lc = state_color(self.loader)
+        mag = pg.Rect(center_x - 7, center_y + 8, 14, 11)
+        pg.draw.rect(surface, lc, mag, border_radius=2)
+        pg.draw.rect(surface, (15, 15, 15), mag, 1, border_radius=2)
+        if not self.loader.is_alive:
+            mark_x(center_x, center_y + 13, 6)
+            smoke(center_x, center_y + 10)
+        tag("AMMO", center_x + 20, center_y + 8, self.loader)
+
+        # ----- Maschine (Engineer) -----
+        ec = state_color(self.engineer)
+        eng = pg.Rect(center_x - 9, center_y + 24, 18, 14)
+        pg.draw.rect(surface, ec, eng, border_radius=2)
+        pg.draw.rect(surface, (15, 15, 15), eng, 1, border_radius=2)
+        pg.draw.line(surface, (25, 25, 25), (center_x - 4, center_y + 26), (center_x - 4, center_y + 36), 1)
+        pg.draw.line(surface, (25, 25, 25), (center_x + 4, center_y + 26), (center_x + 4, center_y + 36), 1)
+        if not self.engineer.is_alive:
+            mark_x(center_x, center_y + 31, 8)
+            smoke(center_x, center_y + 26)
+        tag("ENG", center_x + 22, center_y + 26, self.engineer)
+
+        # ----- Ruder / Steuer (Driver) -----
+        dc = state_color(self.driver)
+        wheel = (center_x, center_y + 47)
+        pg.draw.circle(surface, dc, wheel, 6)
+        pg.draw.circle(surface, (15, 15, 15), wheel, 6, 1)
+        for ang in range(0, 360, 45):
+            ex = wheel[0] + int(math.cos(math.radians(ang)) * 6)
+            ey = wheel[1] + int(math.sin(math.radians(ang)) * 6)
+            pg.draw.line(surface, (20, 20, 20), wheel, (ex, ey), 1)
+        if not self.driver.is_alive:
+            mark_x(wheel[0], wheel[1], 6)
+            smoke(center_x, center_y + 44)
+        tag("HELM", center_x - 24, center_y + 44, self.driver)
+
+        # Rumpf-Tag
+        tag("HULL", center_x - 24, center_y - 40, self.boatswain)
+
+        # ----- Status-Zeile -----
+        members = [
+            ("GUNS", self.gunner), ("BRIDGE", self.navigator), ("AMMO", self.loader),
+            ("ENGINE", self.engineer), ("HELM", self.driver), ("HULL", self.boatswain),
+        ]
+        down = [name for name, m in members if not m.is_alive]
+        footer_y = box_top + box_height - 18
+        if down:
+            msg = f"{len(down)} SYSTEM{'S' if len(down) > 1 else ''} DOWN"
+            blink = 0.5 + 0.5 * math.sin(t * 6)
+            col = (int(180 + 75 * blink), 50, 50)
+            status = font_status.render(msg, True, col)
+        else:
+            status = font_status.render("ALL SYSTEMS OK", True, (60, 220, 90))
+        surface.blit(status, (box_left + box_width // 2 - status.get_width() // 2, footer_y))
         
 
 # ==================== SCHIFF-SCHADENSMODELL ====================
@@ -764,10 +899,63 @@ def save_gems(count):
         json.dump(data, f)
 
 
-def load_perks():
-    """Lädt die Perk-Level aus der Datei"""
+# ==================== FLOTTE & CREW-ROSTER (persistent) ====================
+DEFAULT_SHIP = {
+    "class_name": "Sloop",
+    "hp_mult": 1.0,
+    "speed_mult": 1.0,
+    "dmg_mult": 1.0,
+    "sprite_key": "default",
+}
+
+
+def load_crew_roster():
+    """Lädt das permanente Crew-Roster (auf Inseln angeheuerte Reserve-Crew)."""
     data = _load_full_save()
-    return data.get('perks', {})
+    roster = data.get('crew_roster', [])
+    return roster if isinstance(roster, list) else []
+
+
+def save_crew_roster(roster):
+    """Speichert das permanente Crew-Roster."""
+    data = _load_full_save()
+    data['crew_roster'] = roster
+    with open(GEM_SAVE_FILE, 'w') as f:
+        json.dump(data, f)
+
+
+def load_fleet():
+    """Lädt die Flotte (Liste von Schiff-Dicts); enthält immer mindestens das Standardschiff."""
+    data = _load_full_save()
+    fleet = data.get('fleet', [])
+    if not isinstance(fleet, list) or not fleet:
+        return [dict(DEFAULT_SHIP)]
+    return fleet
+
+
+def save_fleet(fleet):
+    """Speichert die Flotte."""
+    data = _load_full_save()
+    data['fleet'] = fleet
+    with open(GEM_SAVE_FILE, 'w') as f:
+        json.dump(data, f)
+
+
+def load_active_ship_idx():
+    """Lädt den Index des aktiven Flaggschiffs."""
+    data = _load_full_save()
+    try:
+        return int(data.get('active_ship_idx', 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def save_active_ship_idx(idx):
+    """Speichert den Index des aktiven Flaggschiffs."""
+    data = _load_full_save()
+    data['active_ship_idx'] = int(idx)
+    with open(GEM_SAVE_FILE, 'w') as f:
+        json.dump(data, f)
 
 
 def load_selected_pirate_id():
@@ -805,7 +993,7 @@ def save_achievement_state(state):
 def load_unlocked_pirate_ids():
     """Lädt freigeschaltete Piratenklassen"""
     data = _load_full_save()
-    base = {'balanced', 'berserker', 'navigator', 'engineer'}
+    base = {'balanced'}
     unlocked = data.get('unlocked_pirates', list(base))
     if not isinstance(unlocked, list):
         return set(base)
@@ -815,7 +1003,7 @@ def load_unlocked_pirate_ids():
 def save_unlocked_pirate_ids(unlocked_ids):
     """Speichert freigeschaltete Piratenklassen"""
     data = _load_full_save()
-    base = {'balanced', 'berserker', 'navigator', 'engineer'}
+    base = {'balanced'}
     data['unlocked_pirates'] = sorted(set(unlocked_ids) | base)
     with open(GEM_SAVE_FILE, 'w') as f:
         json.dump(data, f)
@@ -981,6 +1169,89 @@ class StatCrate:
         pg.draw.line(surface, (230, 185, 90), (sx, outer.top), (sx, outer.bottom), 3)
         pg.draw.rect(surface, (245, 220, 150), (sx - 3, sy - 3, 6, 6), border_radius=2)
 
+
+# ==================== ARTEFAKTE (Kisten-Beute) ====================
+# Jede Kiste enthaelt ein zufaelliges Artefakt. Manche geben simple Stat-Boni,
+# andere schalten einzigartige Kampf-Effekte frei (Krit, Lebensraub, Mehrfach-
+# schuss, Durchschlag, Explosivmunition, Schild, Wiederbelebung ...).
+# apply(p) veraendert die crate_bonus_* Werte des PlayState p.
+RARITY_WEIGHT = {'common': 100, 'uncommon': 50, 'rare': 22, 'epic': 9, 'legendary': 3}
+RARITY_COLOR = {
+    'common': (205, 205, 215),
+    'uncommon': (90, 220, 130),
+    'rare': (90, 165, 255),
+    'epic': (200, 120, 255),
+    'legendary': (255, 190, 70),
+}
+
+ARTIFACTS = [
+    # ---------- Common: einfache Stat-Boni ----------
+    {'id': 'wind_sail',   'name': 'Wind-Segel',        'desc': '+8% Fahrtempo',        'rarity': 'common', 'color': (90, 220, 150), 'apply': lambda p: p._art_apply(speed_pct=0.08)},
+    {'id': 'canvas',      'name': 'Segeltuch',         'desc': '+6% Fahrtempo',        'rarity': 'common', 'color': (120, 210, 180), 'apply': lambda p: p._art_apply(speed_pct=0.06)},
+    {'id': 'fast_fuse',   'name': 'Schnellzuender',    'desc': '+8% Feuerrate',        'rarity': 'common', 'color': (255, 170, 70), 'apply': lambda p: p._art_apply(fire_rate_pct=0.08)},
+    {'id': 'powder',      'name': 'Pulverkammer',      'desc': '+6% Feuerrate',        'rarity': 'common', 'color': (255, 190, 90), 'apply': lambda p: p._art_apply(fire_rate_pct=0.06)},
+    {'id': 'rations',     'name': 'Heilproviant',      'desc': '+0.8 Reparatur/s',     'rarity': 'common', 'color': (90, 210, 120), 'apply': lambda p: p._art_apply(regen=0.8)},
+    {'id': 'planks',      'name': 'Verstaerkte Planken','desc': '+18 Max HP',          'rarity': 'common', 'color': (220, 95, 95),  'apply': lambda p: p._art_apply(max_health=18)},
+    {'id': 'oak_hull',    'name': 'Eichenrumpf',       'desc': '+14 Max HP',           'rarity': 'common', 'color': (200, 130, 90),  'apply': lambda p: p._art_apply(max_health=14)},
+    {'id': 'sharp_ammo',  'name': 'Scharfe Munition',  'desc': '+6 Schaden',           'rarity': 'common', 'color': (190, 120, 255), 'apply': lambda p: p._art_apply(damage=6)},
+    {'id': 'whetstone',   'name': 'Schleifstein',      'desc': '+5 Schaden',           'rarity': 'common', 'color': (170, 140, 230), 'apply': lambda p: p._art_apply(damage=5)},
+    {'id': 'lead_ball',   'name': 'Bleikugeln',        'desc': '+8% Schaden',          'rarity': 'common', 'color': (160, 150, 200), 'apply': lambda p: p._art_apply(damage_pct=0.08)},
+    {'id': 'lookout',     'name': 'Ausguck',           'desc': '+40 Aufsammel-Radius', 'rarity': 'common', 'color': (120, 200, 255), 'apply': lambda p: p._art_apply(pickup_radius=40)},
+    {'id': 'lucky_coin',  'name': 'Gluckstaler',       'desc': '+1 Muenze pro Kill',   'rarity': 'common', 'color': (230, 190, 70),  'apply': lambda p: p._art_apply(coin_bonus=1)},
+    {'id': 'ballast',     'name': 'Ballast-Abwurf',    'desc': '+7% Fahrtempo',        'rarity': 'common', 'color': (110, 200, 170), 'apply': lambda p: p._art_apply(speed_pct=0.07)},
+    {'id': 'emergency',   'name': 'Notproviant',       'desc': '+12 Max HP, +0.5 Rep', 'rarity': 'common', 'color': (150, 210, 120), 'apply': lambda p: p._art_apply(max_health=12, regen=0.5)},
+
+    # ---------- Uncommon ----------
+    {'id': 'gust',        'name': 'Sturmboee',         'desc': '+14% Fahrtempo',       'rarity': 'uncommon', 'color': (80, 230, 160), 'apply': lambda p: p._art_apply(speed_pct=0.14)},
+    {'id': 'double_load', 'name': 'Doppellader',       'desc': '+1 Schuss pro Seite',  'rarity': 'uncommon', 'color': (255, 200, 90), 'apply': lambda p: p._art_apply(extra_shots=1)},
+    {'id': 'fire_arrow',  'name': 'Brandpfeile',       'desc': '+6% Schaden, kl. Explosion','rarity': 'uncommon', 'color': (255, 140, 60), 'apply': lambda p: p._art_apply(damage_pct=0.06, explosive=45)},
+    {'id': 'grapple',     'name': 'Enterhaken',        'desc': '+8 Ramm-Schaden',      'rarity': 'uncommon', 'color': (210, 160, 90), 'apply': lambda p: p._art_apply(ram_damage=8)},
+    {'id': 'armor_plate', 'name': 'Panzerplatten',     'desc': '+10% Verteidigung',    'rarity': 'uncommon', 'color': (150, 180, 220), 'apply': lambda p: p._art_apply(defense=0.10)},
+    {'id': 'fog_veil',    'name': 'Nebelschleier',     'desc': '+8% Ausweichen',       'rarity': 'uncommon', 'color': (180, 210, 235), 'apply': lambda p: p._art_apply(evasion=0.08)},
+    {'id': 'scope',       'name': 'Zielfernrohr',      'desc': '+8% Krit-Chance',      'rarity': 'uncommon', 'color': (255, 120, 120), 'apply': lambda p: p._art_apply(crit_chance=0.08)},
+    {'id': 'vampir',      'name': 'Vampirklinge',      'desc': '+6% Lebensraub',       'rarity': 'uncommon', 'color': (210, 70, 90),  'apply': lambda p: p._art_apply(lifesteal=0.06)},
+    {'id': 'cannon_oil',  'name': 'Kanonenoel',        'desc': '+12% Feuerrate',       'rarity': 'uncommon', 'color': (255, 180, 80), 'apply': lambda p: p._art_apply(fire_rate_pct=0.12)},
+    {'id': 'treasure_map','name': 'Schatzkarte',       'desc': '+12% XP',              'rarity': 'uncommon', 'color': (230, 200, 110),'apply': lambda p: p._art_apply(xp_pct=0.12)},
+    {'id': 'gem_luck',    'name': 'Gluecksmuenze',     'desc': '+12% Gem-Fund',        'rarity': 'uncommon', 'color': (255, 220, 90), 'apply': lambda p: p._art_apply(gem_find=0.12)},
+    {'id': 'heavy_shot',  'name': 'Wuchtgeschoss',     'desc': 'Groessere Kugeln',     'rarity': 'uncommon', 'color': (170, 160, 210),'apply': lambda p: p._art_apply(proj_size=6)},
+    {'id': 'turbo_fuse',  'name': 'Turbolunte',        'desc': '+18% Kugel-Tempo',     'rarity': 'uncommon', 'color': (255, 210, 120),'apply': lambda p: p._art_apply(proj_speed_pct=0.18)},
+    {'id': 'rum_barrel',  'name': 'Rumfass',           'desc': '+1.4 Reparatur/s',     'rarity': 'uncommon', 'color': (200, 150, 90), 'apply': lambda p: p._art_apply(regen=1.4)},
+    {'id': 'chain_ball',  'name': 'Kettenkugel',       'desc': '+1 Durchschlag',       'rarity': 'uncommon', 'color': (160, 170, 190),'apply': lambda p: p._art_apply(pierce=1)},
+    {'id': 'spike_hull',  'name': 'Igel-Panzer',       'desc': 'Reflektiert 60% Schaden','rarity': 'uncommon', 'color': (200, 200, 220),'apply': lambda p: p._art_apply(thorns=0.6)},
+
+    # ---------- Rare ----------
+    {'id': 'gunner_master','name': 'Kanonier-Meister', 'desc': '+18% Schaden, +10% Feuerrate','rarity': 'rare', 'color': (200, 110, 255),'apply': lambda p: p._art_apply(damage_pct=0.18, fire_rate_pct=0.10)},
+    {'id': 'ghost_ship',  'name': 'Geisterschiff',     'desc': '+14% Ausweichen',      'rarity': 'rare', 'color': (170, 220, 240),'apply': lambda p: p._art_apply(evasion=0.14)},
+    {'id': 'bulwark',     'name': 'Bollwerk',          'desc': '+18% Verteidigung, +25 HP','rarity': 'rare', 'color': (140, 190, 230),'apply': lambda p: p._art_apply(defense=0.18, max_health=25)},
+    {'id': 'berserk_keg', 'name': 'Berserker-Fass',    'desc': '+25% Schaden, -8% Verteid.','rarity': 'rare', 'color': (255, 90, 70), 'apply': lambda p: p._art_apply(damage_pct=0.25, defense=-0.08)},
+    {'id': 'clipper',     'name': 'Schnellsegler',     'desc': '+20% Tempo, +12% Feuerrate','rarity': 'rare', 'color': (90, 230, 190),'apply': lambda p: p._art_apply(speed_pct=0.20, fire_rate_pct=0.12)},
+    {'id': 'demolitionist','name': 'Sprengmeister',    'desc': 'Explosivmunition (70)','rarity': 'rare', 'color': (255, 130, 50), 'apply': lambda p: p._art_apply(explosive=70)},
+    {'id': 'bloodthirst', 'name': 'Blutdurst',         'desc': '+12% Lebensraub, +5 HP/Kill','rarity': 'rare', 'color': (220, 60, 80), 'apply': lambda p: p._art_apply(lifesteal=0.12, heal_on_kill=5)},
+    {'id': 'war_chest',   'name': 'Kriegskasse',       'desc': '+2 Muenzen/Kill, +15% Gem','rarity': 'rare', 'color': (240, 200, 80),'apply': lambda p: p._art_apply(coin_bonus=2, gem_find=0.15)},
+    {'id': 'triple_shot', 'name': 'Dreifachschuss',    'desc': '+2 Schuss pro Seite',  'rarity': 'rare', 'color': (255, 210, 100),'apply': lambda p: p._art_apply(extra_shots=2)},
+    {'id': 'piercer',     'name': 'Durchschlag',       'desc': '+2 Durchschlag, +10% Tempo','rarity': 'rare', 'color': (150, 180, 210),'apply': lambda p: p._art_apply(pierce=2, proj_speed_pct=0.10)},
+    {'id': 'kraken_armor','name': 'Kraken-Panzer',     'desc': '+40 Schild',           'rarity': 'rare', 'color': (90, 200, 210), 'apply': lambda p: p._art_apply(max_shield=40)},
+    {'id': 'reaper',      'name': 'Schnitter',         'desc': '+12% Krit, +40% Krit-Schaden','rarity': 'rare', 'color': (230, 90, 130),'apply': lambda p: p._art_apply(crit_chance=0.12, crit_mult=0.40)},
+
+    # ---------- Epic ----------
+    {'id': 'hell_broadside','name': 'Hoellenbroadside','desc': '+2 Schuss, +12% Schaden','rarity': 'epic', 'color': (255, 100, 80), 'apply': lambda p: p._art_apply(extra_shots=2, damage_pct=0.12)},
+    {'id': 'phoenix',     'name': 'Phoenixfeder',      'desc': 'Wiederbelebung (1x)',  'rarity': 'epic', 'color': (255, 160, 60), 'apply': lambda p: p._art_apply(revive=1)},
+    {'id': 'storm_lord',  'name': 'Sturmherr',         'desc': '+25% Tempo, +15% Ausw., +12% FR','rarity': 'epic', 'color': (100, 230, 210),'apply': lambda p: p._art_apply(speed_pct=0.25, evasion=0.15, fire_rate_pct=0.12)},
+    {'id': 'titan_hull',  'name': 'Titanenrumpf',      'desc': '+60 HP, +20% Verteid., +2 Rep','rarity': 'epic', 'color': (150, 200, 240),'apply': lambda p: p._art_apply(max_health=60, defense=0.20, regen=2.0)},
+    {'id': 'marksman',    'name': 'Meisterschuetze',   'desc': '+20% Krit, +80% Krit-Schaden','rarity': 'epic', 'color': (255, 110, 140),'apply': lambda p: p._art_apply(crit_chance=0.20, crit_mult=0.80)},
+    {'id': 'soul_reaver', 'name': 'Seelenraeuber',     'desc': '+18% Lebensraub, +8 HP/Kill','rarity': 'epic', 'color': (200, 60, 110),'apply': lambda p: p._art_apply(lifesteal=0.18, heal_on_kill=8)},
+    {'id': 'thunder_ball','name': 'Donnerkugeln',      'desc': 'Explosion (90), +2 Durchschlag','rarity': 'epic', 'color': (255, 150, 60),'apply': lambda p: p._art_apply(explosive=90, pierce=2)},
+    {'id': 'gold_rush',   'name': 'Goldrausch',        'desc': '+30% XP, +25% Gem, +3 Muenzen','rarity': 'epic', 'color': (255, 215, 90),'apply': lambda p: p._art_apply(xp_pct=0.30, gem_find=0.25, coin_bonus=3)},
+
+    # ---------- Legendary ----------
+    {'id': 'leviathan',   'name': 'Leviathan-Herz',    'desc': '+80 HP, +30 Schild, +12% Verteid.','rarity': 'legendary', 'color': (255, 200, 80),'apply': lambda p: p._art_apply(max_health=80, max_shield=30, regen=2.5, defense=0.12)},
+    {'id': 'armageddon',  'name': 'Weltenbrand',       'desc': '+30% Schaden, Explosion (100), +2 Schuss','rarity': 'legendary', 'color': (255, 150, 50),'apply': lambda p: p._art_apply(damage_pct=0.30, explosive=100, extra_shots=2)},
+    {'id': 'poseidon',    'name': 'Poseidons Zorn',    'desc': '+2 Schuss, +2 Durchschlag, +15% Krit','rarity': 'legendary', 'color': (90, 210, 255),'apply': lambda p: p._art_apply(extra_shots=2, pierce=2, proj_speed_pct=0.20, crit_chance=0.15)},
+    {'id': 'captains_curse','name': 'Fluch des Kapitaens','desc': '+40% Schaden, +25% Lebensraub','rarity': 'legendary', 'color': (200, 70, 90),'apply': lambda p: p._art_apply(damage_pct=0.40, crit_chance=0.15, lifesteal=0.25, defense=-0.10)},
+    {'id': 'eternal_storm','name': 'Ewiger Sturm',     'desc': '+30% Tempo, +20% FR, Wiederbeleb.','rarity': 'legendary', 'color': (120, 240, 220),'apply': lambda p: p._art_apply(speed_pct=0.30, fire_rate_pct=0.20, evasion=0.15, revive=1)},
+]
+
+
 pg.font.init()
 
 font: pg.font.FontType = pg.font.SysFont("Arial", 100)
@@ -1029,6 +1300,138 @@ richtungen = [
         (1, 1),
     ]
 ]
+
+
+# ==================== INSEL / REKRUTIERUNG (Stage 1) ====================
+PIRATE_NAMES = [
+    "Blackbeard", "Anne", "Calico Jack", "Mary", "Bartholomew", "Henry",
+    "Grace", "Ching", "Roberts", "Morgan", "Hook", "Silver", "Flint",
+    "Sparrow", "Barbossa", "Vane", "Rackham", "Bonny", "Teach", "Kidd",
+]
+
+# Schiffs-Katalog: class_name, Multiplikatoren, Preis (Gems)
+SHIP_CATALOG = [
+    {"class_name": "Sloop",      "hp_mult": 1.0, "speed_mult": 1.15, "dmg_mult": 0.90, "price": 0,   "sprite_key": "default"},
+    {"class_name": "Brigantine", "hp_mult": 1.3, "speed_mult": 1.00, "dmg_mult": 1.10, "price": 50,  "sprite_key": "default"},
+    {"class_name": "Fregatte",   "hp_mult": 1.7, "speed_mult": 0.90, "dmg_mult": 1.30, "price": 110, "sprite_key": "default"},
+    {"class_name": "Galeone",    "hp_mult": 2.2, "speed_mult": 0.78, "dmg_mult": 1.55, "price": 210, "sprite_key": "default"},
+]
+
+
+class CrewRecruit:
+    """Ein anheuerbarer Crew-Kandidat auf einer Insel."""
+    LEVEL_NAMES = {1: "Green", 2: "Veteran", 3: "Master"}
+    LEVEL_PRICE = {1: 15, 2: 40, 3: 80}
+
+    def __init__(self, role, name, level, price):
+        self.role = role
+        self.name = name
+        self.level = level
+        self.price = price
+
+    @classmethod
+    def random(cls):
+        role = random.choice(list(CrewMember.ROLES.keys()))
+        name = random.choice(PIRATE_NAMES)
+        level = random.choices([1, 2, 3], weights=[60, 30, 10])[0]
+        return cls(role, name, level, cls.LEVEL_PRICE[level])
+
+
+class ShipOffer:
+    """Ein kaufbares Schiff in der Werft."""
+    def __init__(self, spec):
+        self.class_name = spec["class_name"]
+        self.hp_mult = spec["hp_mult"]
+        self.speed_mult = spec["speed_mult"]
+        self.dmg_mult = spec["dmg_mult"]
+        self.price = spec["price"]
+        self.sprite_key = spec.get("sprite_key", "default")
+
+    def to_fleet_entry(self):
+        return {
+            "class_name": self.class_name,
+            "hp_mult": self.hp_mult,
+            "speed_mult": self.speed_mult,
+            "dmg_mult": self.dmg_mult,
+            "sprite_key": self.sprite_key,
+        }
+
+
+class IslandMap:
+    """Beschreibt eine begehbare Insel: Welt-Anker + Surface + Maske + Props."""
+    def __init__(self, island_id, anchor_topleft, surface, mask):
+        self.id = island_id                  # -1 = Hauptinsel, sonst Index in extra_islands
+        self.anchor = pg.Vector2(anchor_topleft)
+        self.surface = surface
+        self.mask = mask
+        self.interactables = []              # list[Interactable]
+
+    def is_land(self, world_pos):
+        lx = int(world_pos.x - self.anchor.x)
+        ly = int(world_pos.y - self.anchor.y)
+        if 0 <= lx < self.surface.get_width() and 0 <= ly < self.surface.get_height():
+            return bool(self.mask.get_at((lx, ly)))
+        return False
+
+
+class Interactable:
+    """Ein NPC/Gebäude an Land, mit dem der Spieler per E interagiert."""
+    def __init__(self, kind, pos, payload):
+        self.kind = kind          # "recruit" | "shipyard"
+        self.pos = pg.Vector2(pos)
+        self.payload = payload    # list[CrewRecruit] oder list[ShipOffer]
+        self.radius = 72
+        self.bob_timer = random.uniform(0.0, 3.0)
+
+    def update(self, dt_seconds):
+        self.bob_timer += dt_seconds
+
+    def draw(self, surface, offset):
+        sx = int(self.pos.x - offset.x)
+        sy = int(self.pos.y - offset.y)
+        bob = int(math.sin(self.bob_timer * 2.5) * 3)
+        # Boden-Schatten
+        shadow = pg.Surface((40, 14), pg.SRCALPHA)
+        pg.draw.ellipse(shadow, (0, 0, 0, 90), shadow.get_rect())
+        surface.blit(shadow, (sx - 20, sy + 14))
+        if self.kind == "recruit":
+            self._draw_recruit(surface, sx, sy + bob)
+        else:
+            self._draw_shipyard(surface, sx, sy + bob)
+
+    def _draw_recruit(self, surface, sx, sy):
+        # Einfacher Pirat-NPC
+        pg.draw.rect(surface, (50, 80, 130), (sx - 9, sy - 4, 18, 22), border_radius=4)   # Körper
+        pg.draw.rect(surface, (35, 60, 100), (sx - 9, sy - 4, 18, 22), 1, border_radius=4)
+        pg.draw.circle(surface, (235, 200, 165), (sx, sy - 12), 8)                          # Kopf
+        pg.draw.circle(surface, (60, 45, 35), (sx, sy - 12), 8, 1)
+        pg.draw.rect(surface, (185, 55, 55), (sx - 8, sy - 18, 16, 5), border_radius=2)     # Bandana
+        pg.draw.circle(surface, (25, 25, 25), (sx - 3, sy - 12), 1)
+        pg.draw.circle(surface, (25, 25, 25), (sx + 3, sy - 12), 1)
+        # "!" Sprechblase
+        pulse = abs(math.sin(self.bob_timer * 4))
+        pg.draw.circle(surface, (255, 230, 120), (sx, sy - 30), 8)
+        ex = self._exclaim_font().render("!", True, (60, 40, 0))
+        surface.blit(ex, ex.get_rect(center=(sx, sy - 30)))
+
+    def _draw_shipyard(self, surface, sx, sy):
+        # Werft-Hütte
+        pg.draw.polygon(surface, (95, 62, 38), [(sx - 24, sy - 12), (sx + 24, sy - 12), (sx, sy - 32)])  # Dach
+        pg.draw.rect(surface, (130, 92, 58), (sx - 20, sy - 12, 40, 30), border_radius=3)                 # Wand
+        pg.draw.rect(surface, (70, 48, 28), (sx - 20, sy - 12, 40, 30), 2, border_radius=3)
+        pg.draw.rect(surface, (55, 38, 22), (sx - 6, sy + 2, 12, 16), border_radius=2)                    # Tür
+        # Anker-Symbol
+        pg.draw.circle(surface, (220, 220, 230), (sx, sy - 6), 3, 1)
+        pg.draw.line(surface, (220, 220, 230), (sx, sy - 4), (sx, sy + 8), 2)
+        pg.draw.line(surface, (220, 220, 230), (sx - 6, sy + 6), (sx + 6, sy + 6), 2)
+
+    _ex_font = None
+
+    @classmethod
+    def _exclaim_font(cls):
+        if cls._ex_font is None:
+            cls._ex_font = pg.font.SysFont("Arial", 12, bold=True)
+        return cls._ex_font
 
 
 class Cannonball:
@@ -1441,7 +1844,7 @@ class NPCShip:
             self.health = int(900 * difficulty)
             self.max_health = int(900 * difficulty)
             self.shoot_cooldown_duration = max(0.3, 1.0 / difficulty)
-            self.speed = int(110 * min(1.5, 0.8 + difficulty * 0.2))
+            self.speed = int(110 * min(2.4, 0.8 + difficulty * 0.25))
             self.shoot_range = int(450 + difficulty * 15)
             self.boss_damage = int(25 * (1 + (difficulty - 1) * 0.3))  # Schaden skaliert
             self.boss_aggro_range = int(450 + difficulty * 20)
@@ -1454,7 +1857,7 @@ class NPCShip:
             self.health = int(100 * difficulty)
             self.max_health = int(100 * difficulty)
             self.shoot_cooldown_duration = max(0.5, 1.5 / difficulty)
-            self.speed = int(100 * min(2.0, 0.8 + difficulty * 0.4))
+            self.speed = int(100 * min(3.2, 0.8 + difficulty * 0.45))
             self.shoot_range = int(400 + difficulty * 10)
             self.boss_damage = int(10 * (1 + (difficulty - 1) * 0.25))  # Schaden skaliert
             self.respawn_duration = max(5.0, 10.0 - difficulty * 0.5)  # Schnellerer Respawn
@@ -1472,7 +1875,7 @@ class NPCShip:
         if self.is_boss:
             new_max = int(900 * difficulty)
             self.shoot_cooldown_duration = max(0.3, 1.0 / difficulty)
-            self.speed = int(110 * min(1.5, 0.8 + difficulty * 0.2))
+            self.speed = int(110 * min(2.4, 0.8 + difficulty * 0.25))
             self.shoot_range = int(450 + difficulty * 15)
             self.boss_damage = int(25 * (1 + (difficulty - 1) * 0.3))
             self.boss_aggro_range = int(450 + difficulty * 20)
@@ -1480,7 +1883,7 @@ class NPCShip:
         else:
             new_max = int(100 * difficulty)
             self.shoot_cooldown_duration = max(0.5, 1.5 / difficulty)
-            self.speed = int(100 * min(2.0, 0.8 + difficulty * 0.4))
+            self.speed = int(100 * min(3.2, 0.8 + difficulty * 0.45))
             self.shoot_range = int(400 + difficulty * 10)
             self.boss_damage = int(10 * (1 + (difficulty - 1) * 0.25))
             self.hit_radius = 46
@@ -1607,7 +2010,10 @@ class PlayState(State):
         
         # Kill-Counter
         self.kills = 0
-        
+
+        # Muenzen: Pro-Run-Waehrung fuer Rekrutierung & Werft (wird jeden Run zurueckgesetzt)
+        self.coins = 0
+
         # Survival-Zeit (für Schwierigkeits-Skalierung)
         self.survival_time = 0
         
@@ -1647,17 +2053,12 @@ class PlayState(State):
         self.gem_spawn_timer = 0
         self.gem_spawn_interval = 30.0  # Alle 30 Sekunden Chance auf neuen Gem
 
-        # Kisten-Items (nur fuer den aktuellen Run)
+        # Kisten/Artefakte (nur fuer den aktuellen Run)
         self.crates = self.generate_crates()
         self.crate_spawn_timer = 0
-        self.crate_spawn_interval = 45.0
-        self.active_crate_effects = []
-        self.crate_bonus_speed_pct = 0.0
-        self.crate_bonus_fire_rate_pct = 0.0
-        self.crate_bonus_regen = 0.0
-        self.crate_bonus_max_health = 0
-        self.crate_bonus_damage = 0
-        
+        self.crate_spawn_interval = 30.0  # Alle 30 Sekunden eine neue Kiste
+        self._clear_crate_effects()
+
         # Fonts cachen (Performance)
         self.font_main = pg.font.SysFont("Arial", 24)
         self.font_small = pg.font.SysFont("Arial", 18)
@@ -1682,13 +2083,29 @@ class PlayState(State):
             frame = pirate_sheet.subsurface(pg.Rect(i * frame_w, 6 * frame_h, frame_w, frame_h))
             frame = pg.transform.scale2x(frame)  # 2x größer
             self.idle_frames.append(frame)
-        
+
+        # Piraten-Sprite wie im Quit-Dialog (fuer den Avatar an Land)
+        self.pirate_frames = self._load_pirate_frames(scale=1)
+
         # Charakter-Status
         self.on_foot = False  # Ob Spieler zu Fuß ist
         self.player_foot_pos = pg.Vector2(0, 0)  # Position wenn zu Fuß
         self.foot_direction = 0  # 0=rechts, 1=oben, 2=links, 3=unten
         self.animation_timer = 0
         self.animation_speed = 0.15  # Sekunden pro Frame
+        # On-Foot / Insel-Modus (Stage 1)
+        self.foot_speed = 220              # Laufgeschwindigkeit px/s
+        self.foot_facing = pg.Vector2(1, 0)
+        self.foot_ui = None                # None | "recruit" | "shipyard"
+        self.nearby_interactable = None
+        self.current_island = None         # IslandMap, wenn an Land
+        self._active_interactable = None
+        self._panel_index = 0
+        self._foot_moving = False
+        self._foot_message = None          # (text, restzeit_sekunden)
+        # Flotte / Crew-Roster (werden in restart_game aus dem Save geladen)
+        self.fleet = [dict(DEFAULT_SHIP)]
+        self.active_ship_idx = 0
         
         # ==================== PREMIUM EFFEKTE ====================
         # Partikel-Systeme
@@ -1749,94 +2166,296 @@ class PlayState(State):
         return gems
 
     def generate_crates(self):
-        """Generiert zufaellige Kisten in der Welt."""
-        crates = []
-        num_crates = random.randint(3, 6)
-        insel_w, insel_h = self.insel.get_size()
-
-        for _ in range(num_crates):
-            while True:
-                x = random.randint(-int(self.world_size.x // 2), int(self.world_size.x // 2))
-                y = random.randint(-int(self.world_size.y // 2), int(self.world_size.y // 2))
-
-                if 0 < x < insel_w and 0 < y < insel_h:
-                    continue
-                if pg.Vector2(x, y).distance_to(self.cords_schiff1) < 350:
-                    continue
-                break
-
-            crates.append(StatCrate(pg.Vector2(x, y)))
-
-        return crates
+        """Kisten spawnen ausschliesslich ueber den 30-Sekunden-Timer,
+        daher startet der Run ohne Kisten."""
+        return []
 
     def _clear_crate_effects(self):
-        """Entfernt alle aktiven Kisten-Effekte (z. B. beim Tod)."""
+        """Entfernt alle aktiven Artefakt-Effekte (z. B. beim Tod)."""
         self.active_crate_effects = []
+        # --- Basis-Boni ---
         self.crate_bonus_speed_pct = 0.0
         self.crate_bonus_fire_rate_pct = 0.0
         self.crate_bonus_regen = 0.0
         self.crate_bonus_max_health = 0
         self.crate_bonus_damage = 0
+        # --- Erweiterte Boni / einzigartige Effekte ---
+        self.crate_bonus_damage_pct = 0.0
+        self.crate_bonus_defense = 0.0
+        self.crate_bonus_evasion = 0.0
+        self.crate_bonus_crit_chance = 0.0
+        self.crate_bonus_crit_mult = 0.0      # additiv auf Basis-Krit x2.0
+        self.crate_bonus_lifesteal = 0.0
+        self.crate_bonus_heal_on_kill = 0
+        self.crate_bonus_xp_pct = 0.0
+        self.crate_bonus_gem_find = 0.0
+        self.crate_bonus_coin_bonus = 0
+        self.crate_bonus_extra_shots = 0
+        self.crate_bonus_proj_speed_pct = 0.0
+        self.crate_bonus_proj_size = 0
+        self.crate_bonus_pierce = 0
+        self.crate_bonus_explosive = 0
+        self.crate_bonus_thorns = 0.0
+        self.crate_bonus_ram_damage = 0
+        self.crate_bonus_pickup_radius = 0
+        self.crate_bonus_revive = 0
+        self.crate_bonus_max_shield = 0
+        # Aktueller Schildwert + Aufladezustand
+        self.shield = 0
+        self.shield_regen_timer = 0.0
+        self.artifact_popup = None  # {'name','rarity','color','desc','timer'}
+
+    def _art_apply(self, **kwargs):
+        """Addiert Artefakt-Boni auf die crate_bonus_* Werte."""
+        for key, delta in kwargs.items():
+            attr = 'crate_bonus_' + key
+            setattr(self, attr, getattr(self, attr, 0) + delta)
+        # Verteidigung / Ausweichen nicht negativ werden lassen
+        # (Glass-Cannon-Artefakte koennen abziehen)
+        if 'max_shield' in kwargs:
+            # Schild sofort auf neues Maximum auffuellen
+            self.shield = self.crate_bonus_max_shield
+
+    def _current_max_health(self):
+        return self.base_max_health + self.max_health_level * 20 + self.crate_bonus_max_health
+
+    def _heal(self, amount):
+        """Heilt das Schiff, begrenzt auf aktuelles Maximum."""
+        if amount <= 0 or self.is_dead:
+            return
+        self.health = min(self._current_max_health(), self.health + amount)
+
+    def _make_player_ball(self, pos, direction):
+        """Erzeugt eine Spieler-Kanonenkugel inkl. Artefakt-Projektil-Boni."""
+        ball = Cannonball(pos, direction)
+        ball.speed *= (1 + self.crate_bonus_proj_speed_pct)
+        ball.radius += self.crate_bonus_proj_size
+        ball.pierce = self.crate_bonus_pierce      # Anzahl zusaetzlicher Durchschlaege
+        ball.explosive = self.crate_bonus_explosive  # AoE-Radius (0 = keiner)
+        ball.hit_ids = set()                        # bereits getroffene Gegner (Durchschlag)
+        return ball
+
+    def _boss_bar_visible(self):
+        """True wenn gerade eine Boss-Leiste oben angezeigt wird."""
+        for npc in self.npc_ships:
+            if npc.is_boss and not npc.is_dead:
+                if npc.boss_aggroed or self.cords_schiff1.distance_to(npc.pos) < 600:
+                    return True
+        return False
+
+    def _draw_crate_marker_icon(self, surface, cx, cy, size):
+        """Zeichnet ein kleines Kisten-Symbol mittig um (cx, cy)."""
+        r = pg.Rect(cx - size // 2, cy - size // 2, size, size)
+        pg.draw.rect(surface, (185, 130, 75), r, border_radius=3)
+        pg.draw.rect(surface, (95, 62, 35), r, 2, border_radius=3)
+        pg.draw.line(surface, (235, 190, 95), (r.left, cy), (r.right, cy), 2)
+        pg.draw.line(surface, (235, 190, 95), (cx, r.top), (cx, r.bottom), 2)
+
+    def _draw_crate_hud(self, s, w, h):
+        """Artefakt-UI: Kompass mit Kisten-Richtungen, aktive Artefakte,
+        Schild-Anzeige und das Sammel-Popup."""
+        boss_bar = self._boss_bar_visible()
+
+        # ---- Kompass: Richtung & Distanz zu allen offenen Kisten ----
+        pulse = abs(math.sin(self.survival_time * 4)) * 0.4 + 0.6
+        R = 48
+        cx = w // 2
+        cy = 150 if boss_bar else 72
+        comp = pg.Surface((R * 2 + 8, R * 2 + 8), pg.SRCALPHA)
+        ccx = ccy = R + 4
+        # Kompass-Scheibe
+        pg.draw.circle(comp, (12, 18, 30, 205), (ccx, ccy), R)
+        pg.draw.circle(comp, (95, 125, 165, 220), (ccx, ccy), R, 2)
+        pg.draw.circle(comp, (60, 80, 110, 150), (ccx, ccy), R * 2 // 3, 1)
+        # Himmelsrichtungen (N rot hervorgehoben)
+        for label, dx, dy in (("N", 0, -1), ("O", 1, 0), ("S", 0, 1), ("W", -1, 0)):
+            lx = ccx + int(dx * (R - 10))
+            ly = ccy + int(dy * (R - 10))
+            col = (235, 120, 120) if label == "N" else (150, 170, 200)
+            ltxt = self.font_small.render(label, True, col)
+            comp.blit(ltxt, (lx - ltxt.get_width() // 2, ly - ltxt.get_height() // 2))
+        # Schiff in der Mitte
+        pg.draw.circle(comp, (255, 230, 140), (ccx, ccy), 3)
+        # Offene Kisten als Blips (Winkel = Richtung, Radius = Distanz)
+        open_crates = [c for c in self.crates if not c.collected]
+        max_range = 2600.0
+        for crate in open_crates:
+            d = crate.pos - self.cords_schiff1
+            dist = d.length()
+            if dist < 1:
+                continue
+            dirn = d / dist
+            rr = 11 + min(1.0, dist / max_range) * (R - 17)
+            bx = ccx + int(dirn.x * rr)
+            by = ccy + int(dirn.y * rr)
+            pg.draw.rect(comp, (200, 145, 80), (bx - 4, by - 4, 8, 8), border_radius=2)
+            pg.draw.rect(comp, (245, 205, 115, int(255 * pulse)), (bx - 4, by - 4, 8, 8), 1, border_radius=2)
+        s.blit(comp, (cx - (R + 4), cy - (R + 4)))
+        # Anzahl offener Kisten
+        if open_crates:
+            cnt = self.font_small.render(f"{len(open_crates)} Kisten", True, (255, 225, 160))
+            s.blit(cnt, (cx - cnt.get_width() // 2, cy + R + 4))
+
+        # ---- Aktive Artefakte (oben rechts) ----
+        effects = self.active_crate_effects
+        if effects:
+            panel_w = 186
+            row_h = 20
+            start_y = 74 if boss_bar else 14
+            title = self.font_small.render("Artefakte", True, (255, 220, 140))
+            max_rows = min(len(effects), 12)
+            panel_h = 26 + max_rows * row_h
+            px = w - panel_w - 12
+            panel = pg.Surface((panel_w, panel_h), pg.SRCALPHA)
+            pg.draw.rect(panel, (0, 0, 0, 150), (0, 0, panel_w, panel_h), border_radius=8)
+            pg.draw.rect(panel, (120, 100, 60, 200), (0, 0, panel_w, panel_h), 2, border_radius=8)
+            panel.blit(title, (10, 5))
+            for i, eff in enumerate(effects[:max_rows]):
+                ry = 26 + i * row_h
+                dot = RARITY_COLOR.get(eff.get('rarity', 'common'), (200, 200, 200))
+                pg.draw.circle(panel, dot, (14, ry + 8), 5)
+                pg.draw.circle(panel, (255, 255, 255), (14, ry + 8), 5, 1)
+                label = eff['name']
+                if eff.get('stacks', 1) > 1:
+                    label += f" x{eff['stacks']}"
+                name_surf = self.font_small.render(label, True, (225, 225, 235))
+                panel.blit(name_surf, (26, ry))
+            s.blit(panel, (px, start_y))
+
+        # ---- Schild-Anzeige (ueber der Lebensleiste) ----
+        if self.crate_bonus_max_shield > 0:
+            sh_w = 200
+            sh_x, sh_y = 30, h - 102
+            pg.draw.rect(s, (10, 20, 35), (sh_x, sh_y, sh_w, 6), border_radius=3)
+            fill = int(sh_w * (self.shield / max(1, self.crate_bonus_max_shield)))
+            if fill > 0:
+                pg.draw.rect(s, (90, 200, 240), (sh_x, sh_y, fill, 6), border_radius=3)
+
+        # ---- Sammel-Popup ----
+        if self.artifact_popup is not None:
+            pop = self.artifact_popup
+            t = pop['timer']
+            alpha = int(255 * min(1.0, t / 0.6))  # am Ende ausblenden
+            rise = int((3.5 - t) * 6)
+            pw, ph = 300, 56
+            popup = pg.Surface((pw, ph), pg.SRCALPHA)
+            pg.draw.rect(popup, (18, 16, 26, 235), (0, 0, pw, ph), border_radius=10)
+            pg.draw.rect(popup, (*pop['color'], 255), (0, 0, pw, ph), 3, border_radius=10)
+            self._draw_crate_marker_icon(popup, 24, ph // 2, 22)
+            head = self.font_small.render("Artefakt gefunden!", True, (210, 210, 220))
+            popup.blit(head, (46, 8))
+            name_surf = self.font_main.render(pop['name'], True, pop['color'])
+            popup.blit(name_surf, (46, 24))
+            desc_surf = self.font_small.render(pop['desc'], True, (185, 190, 205))
+            popup.blit(desc_surf, (pw - desc_surf.get_width() - 12, ph - 20))
+            popup.set_alpha(alpha)
+            s.blit(popup, (w // 2 - pw // 2, 96 - rise))
 
     def _apply_random_crate_item(self):
-        """Vergibt einen zufaelligen Item-Boost aus einer Kiste."""
-        effects = [
-            {
-                'id': 'speed',
-                'name': 'Wind-Segel',
-                'desc': '+8% Fahrtempo',
-                'color': (80, 220, 140),
-                'apply': lambda: setattr(self, 'crate_bonus_speed_pct', self.crate_bonus_speed_pct + 0.08),
-            },
-            {
-                'id': 'fire_rate',
-                'name': 'Schnellzuender',
-                'desc': '-7% Cooldown',
-                'color': (255, 170, 70),
-                'apply': lambda: setattr(self, 'crate_bonus_fire_rate_pct', self.crate_bonus_fire_rate_pct + 0.07),
-            },
-            {
-                'id': 'regen',
-                'name': 'Heilproviant',
-                'desc': '+0.8 HP/s Repair',
-                'color': (90, 210, 120),
-                'apply': lambda: setattr(self, 'crate_bonus_regen', self.crate_bonus_regen + 0.8),
-            },
-            {
-                'id': 'max_hp',
-                'name': 'Verstaerkte Planken',
-                'desc': '+15 Max HP',
-                'color': (220, 95, 95),
-                'apply': lambda: setattr(self, 'crate_bonus_max_health', self.crate_bonus_max_health + 15),
-            },
-            {
-                'id': 'damage',
-                'name': 'Scharfe Munition',
-                'desc': '+8 Schaden',
-                'color': (190, 120, 255),
-                'apply': lambda: setattr(self, 'crate_bonus_damage', self.crate_bonus_damage + 8),
-            },
-        ]
+        """Vergibt ein zufaelliges Artefakt (nach Seltenheit gewichtet)."""
+        weights = [RARITY_WEIGHT.get(a['rarity'], 1) for a in ARTIFACTS]
+        artifact = random.choices(ARTIFACTS, weights=weights, k=1)[0]
+        artifact['apply'](self)
 
-        effect = random.choice(effects)
-        effect['apply']()
+        # HP ggf. auf neues Maximum anheben ist nicht noetig; nur Overheal kappen
+        self.health = min(self.health, self._current_max_health())
 
+        # Als aktives Artefakt merken (Stacks zaehlen)
         existing = None
         for e in self.active_crate_effects:
-            if e['id'] == effect['id']:
+            if e['id'] == artifact['id']:
                 existing = e
                 break
-
         if existing is not None:
             existing['stacks'] += 1
         else:
             self.active_crate_effects.append({
-                'id': effect['id'],
-                'name': effect['name'],
-                'desc': effect['desc'],
-                'color': effect['color'],
+                'id': artifact['id'],
+                'name': artifact['name'],
+                'desc': artifact['desc'],
+                'rarity': artifact['rarity'],
+                'color': artifact['color'],
                 'stacks': 1,
             })
+
+        # Sammel-Popup anzeigen
+        self.artifact_popup = {
+            'name': artifact['name'],
+            'desc': artifact['desc'],
+            'rarity': artifact['rarity'],
+            'color': RARITY_COLOR.get(artifact['rarity'], (255, 255, 255)),
+            'timer': 3.5,
+        }
+
+    def _kill_enemy(self, npc_ship):
+        """Zentrale Kill-Logik (aus jeder Schadensquelle aufrufbar)."""
+        if npc_ship.is_dead:
+            return
+        npc_ship.is_dead = True
+        self.kills += 1
+        self.coins += 1 + self.crate_bonus_coin_bonus
+        # Artefakt-Boni beim Kill
+        if self.crate_bonus_heal_on_kill:
+            self._heal(self.crate_bonus_heal_on_kill)
+        if self.crate_bonus_gem_find > 0 and random.random() < self.crate_bonus_gem_find:
+            self.total_gems += 1
+            save_gems(self.total_gems)
+            self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -70), 1, (255, 220, 50)))
+
+        if hasattr(self, 'achievement_state'):
+            self.achievement_state['total_kills'] = int(self.achievement_state.get('total_kills', 0)) + 1
+            self._check_achievements()
+        # Grosse Explosion beim Tod
+        self.explosions.append(ExplosionEffect(npc_ship.pos, color=(255, 100, 30), size=40))
+        self.screen_shake = 0.3
+        self.screen_shake_intensity = 12
+        if hasattr(self, 'sfx'):
+            self.sfx.play('explosion')
+
+        # Pruefe ob alle Schiffe dieser Insel tot sind
+        if hasattr(npc_ship, 'home_island'):
+            island_idx = npc_ship.home_island
+            all_dead = True
+            for other_ship in self.npc_ships:
+                if hasattr(other_ship, 'home_island') and other_ship.home_island == island_idx and not other_ship.is_dead:
+                    all_dead = False
+                    break
+            if all_dead and island_idx < len(self.island_ship_status):
+                island_pos, _ = self.island_ship_status[island_idx]
+                self.island_ship_status[island_idx] = (island_pos, False)
+
+        # EXP / Level
+        difficulty = self.get_difficulty()
+        if npc_ship.is_boss:
+            self.level += 1
+            self.skill_points += 2
+            self.exp = 0
+            self.exp_to_level = int(self.exp_to_level * 1.35)
+            self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -50), 1, (255, 230, 120)))
+            self.achievement_popups.append({'text': 'Boss defeated: Instant Level Up!', 'timer': 4.0})
+            if self.boss_arena is not None and self.boss_arena.get('boss') is npc_ship:
+                self._end_boss_arena()
+            self.total_gems += 20
+            save_gems(self.total_gems)
+            self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -80), 20, (255, 220, 50)))
+            self.screen_shake = 0.5
+            self.screen_shake_intensity = 20
+        else:
+            base_exp = 25
+            xp_multiplier = 1.0 + getattr(self, 'xp_boost_perk', 0) * 0.15 + self.crate_bonus_xp_pct
+            if getattr(self, 'xp_booster_active', False) and getattr(self, 'xp_booster_remaining', 0) > 0:
+                xp_multiplier *= 2.0
+            scaled_exp = int(base_exp * difficulty * xp_multiplier)
+            self.exp += scaled_exp
+            self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -50), scaled_exp, (50, 200, 255)))
+
+        while self.exp >= self.exp_to_level:
+            self.exp -= self.exp_to_level
+            self.level += 1
+            self.exp_to_level = int(self.exp_to_level * 1.5)
+            self.skill_points += 1
+            if hasattr(self, 'sfx'):
+                self.sfx.play('levelup')
 
     def generate_rocks(self):
         """Generiert zufällige Steinpositionen überall in der Welt"""
@@ -2064,6 +2683,47 @@ class PlayState(State):
     def take_damage(self, amount):
         """Nimmt Schaden wenn Cooldown abgelaufen ist"""
         if self.damage_cooldown <= 0:
+            # Evasion (Basis + Artefakte): Chance den Treffer komplett auszuweichen
+            evasion = min(0.9, getattr(self, 'evasion', 0.0) + getattr(self, 'crate_bonus_evasion', 0.0))
+            if evasion > 0 and random.random() < evasion:
+                self.damage_cooldown = self.damage_cooldown_duration
+                self.damage_numbers.append(
+                    DamageNumber(self.cords_schiff1 + pg.Vector2(0, -45), 0, (120, 220, 255), text="MISS")
+                )
+                if hasattr(self, 'sfx'):
+                    self.sfx.play('damage')
+                return
+
+            # Defense (Basis + Artefakte): reduziert den erlittenen Schaden
+            defense = min(0.9, max(0.0, getattr(self, 'defense', 0.0) + getattr(self, 'crate_bonus_defense', 0.0)))
+            if defense > 0:
+                amount = max(1, int(round(amount * (1 - defense))))
+
+            # Thorns-Artefakt: reflektiert Schaden auf Gegner in der Naehe (kann nicht toeten)
+            thorns = getattr(self, 'crate_bonus_thorns', 0.0)
+            if thorns > 0:
+                reflected = amount * thorns
+                for npc in self.npc_ships:
+                    if npc.is_dead:
+                        continue
+                    if self.cords_schiff1.distance_squared_to(npc.pos) <= 220 * 220:
+                        npc.health = max(1, npc.health - reflected)
+
+            # Schild-Artefakt: absorbiert Schaden zuerst
+            if getattr(self, 'shield', 0) > 0:
+                absorbed = min(self.shield, amount)
+                self.shield -= absorbed
+                amount -= absorbed
+                self.shield_regen_timer = 0.0
+                if amount <= 0:
+                    self.damage_cooldown = self.damage_cooldown_duration
+                    self.damage_numbers.append(
+                        DamageNumber(self.cords_schiff1 + pg.Vector2(0, -45), 0, (120, 200, 255), text="BLOCK")
+                    )
+                    if hasattr(self, 'sfx'):
+                        self.sfx.play('damage')
+                    return
+
             self.health -= amount
             self.damage_cooldown = self.damage_cooldown_duration
             
@@ -2082,7 +2742,22 @@ class PlayState(State):
             if self.crew.alive_count() <= 0:
                 self.health = 0
                 self.is_dead = True
-            
+
+            # Wiederbelebung (Phoenixfeder-Artefakt): rettet einmal vor dem Tod
+            if self.health <= 0 and not self.is_dead and getattr(self, 'crate_bonus_revive', 0) > 0:
+                self.crate_bonus_revive -= 1
+                self.health = int(self._current_max_health() * 0.5)
+                self.damage_cooldown = 2.0  # kurze Unverwundbarkeit
+                self.explosions.append(ExplosionEffect(self.cords_schiff1, color=(255, 180, 60), size=60))
+                self.damage_numbers.append(
+                    DamageNumber(self.cords_schiff1 + pg.Vector2(0, -50), 0, (255, 200, 80), text="REVIVE")
+                )
+                self.screen_shake = 0.4
+                self.screen_shake_intensity = 14
+                if hasattr(self, 'sfx'):
+                    self.sfx.play('levelup')
+                return
+
             if self.health <= 0:
                 self.health = 0
                 self.is_dead = True
@@ -2114,89 +2789,485 @@ class PlayState(State):
                     self.sfx.play('death')
     
     def toggle_on_foot(self):
-        """Wechselt zwischen Schiff und zu Fuß"""
+        """Wechselt zwischen Schiff und zu Fuss."""
         if self.on_foot:
-            # Wieder einsteigen - nur wenn nahe genug am Boot
-            distance_to_ship = self.player_foot_pos.distance_to(self.cords_schiff1)
-            if distance_to_ship < 100:  # Muss innerhalb 100 Pixel vom Boot sein
+            # Wieder einsteigen - nur nahe am Boot.
+            # WICHTIG: Schiff bleibt an seiner Wasser-Position (nicht auf player_foot_pos
+            # setzen, sonst steckt das Schiff im Insel-Maskenbereich fest).
+            if self.player_foot_pos.distance_to(self.cords_schiff1) < 100:
                 self.on_foot = False
-                self.cords_schiff1 = self.player_foot_pos.copy()
-            # Wenn zu weit weg, passiert nichts
+                self.current_island = None
+                self.nearby_interactable = None
+                self._active_interactable = None
+                self.foot_ui = None
+            return
+        # Aussteigen: passende Insel + Land-Punkt suchen
+        island_map, land_pos = self._find_disembark_spot()
+        if island_map is None:
+            return
+        self.on_foot = True
+        self.player_foot_pos = land_pos
+        self.foot_facing = pg.Vector2(1, 0)
+        self.foot_ui = None
+        self.nearby_interactable = None
+        self.current_island = island_map
+        self._build_island_interactables(island_map)
+        self.camera_pos = pg.Vector2(self.player_foot_pos)
+
+    def _teleport_to_boat(self):
+        """Teleportiert den Spieler von ueberall auf der Insel zurueck aufs Boot."""
+        if not self.on_foot:
+            return
+        self.on_foot = False
+        self.current_island = None
+        self.nearby_interactable = None
+        self._active_interactable = None
+        self.foot_ui = None
+        # Spieler-Position auf die Schiffsposition setzen (fuers naechste Aussteigen)
+        self.player_foot_pos = pg.Vector2(self.cords_schiff1)
+        self._play_sfx('menu_confirm')
+
+    def _near_landing(self):
+        """Schnelle Prüfung, ob das Schiff nahe genug an einer Insel zum Aussteigen ist."""
+        ship = self.cords_schiff1
+        if self.insel.get_rect(topleft=(0, 0)).inflate(300, 300).collidepoint(ship.x, ship.y):
+            return True
+        for island_pos, _scale, island_img, _m in self.extra_islands:
+            if island_img.get_rect(center=island_pos).inflate(300, 300).collidepoint(ship.x, ship.y):
+                return True
+        return False
+
+    def _find_disembark_spot(self):
+        """Sucht nahe der Schiffsposition einen Land-Pixel; liefert (IslandMap, Vector2) oder (None, None)."""
+        ship = self.cords_schiff1
+        candidates = []
+        main_rect = self.insel.get_rect(topleft=(0, 0))
+        if main_rect.inflate(400, 400).collidepoint(ship.x, ship.y):
+            candidates.append(IslandMap(-1, pg.Vector2(0, 0), self.insel, self.mask_insel))
+        for i, (island_pos, _scale, island_img, island_mask) in enumerate(self.extra_islands):
+            rect = island_img.get_rect(center=island_pos)
+            if rect.inflate(400, 400).collidepoint(ship.x, ship.y):
+                candidates.append(IslandMap(i, pg.Vector2(rect.topleft), island_img, island_mask))
+        if not candidates:
+            return None, None
+        # Radiale Suche nach einem begehbaren Land-Pixel
+        for dist in range(40, 280, 14):
+            for angle_deg in range(0, 360, 12):
+                ang = math.radians(angle_deg)
+                test = pg.Vector2(ship.x + math.cos(ang) * dist, ship.y + math.sin(ang) * dist)
+                for im in candidates:
+                    if im.is_land(test):
+                        return im, test
+        # Fallback: Mittelpunkt der ersten Kandidaten-Insel
+        im = candidates[0]
+        center_world = im.anchor + pg.Vector2(im.surface.get_width() // 2, im.surface.get_height() // 2)
+        return im, center_world
+
+    def _build_island_interactables(self, island_map):
+        """Platziert 1 Rekrut-NPC + 1 Werft an Land-Pixeln nahe dem Spieler."""
+        island_map.interactables = []
+        recruits = [CrewRecruit.random() for _ in range(3)]
+        offers = [ShipOffer(spec) for spec in SHIP_CATALOG if spec["price"] > 0]
+        placed = []
+        for kind, payload in (("recruit", recruits), ("shipyard", offers)):
+            pos = self._find_land_spot_near(island_map, self.player_foot_pos, placed)
+            island_map.interactables.append(Interactable(kind, pos, payload))
+            placed.append(pos)
+
+    def _find_land_spot_near(self, island_map, origin, avoid, min_dist=90, max_dist=260):
+        """Findet einen Land-Pixel in einem Ring um origin, mit Abstand zu bereits platzierten Props."""
+        for _ in range(160):
+            ang = random.uniform(0, 2 * math.pi)
+            dist = random.uniform(min_dist, max_dist)
+            cand = pg.Vector2(origin.x + math.cos(ang) * dist, origin.y + math.sin(ang) * dist)
+            if not island_map.is_land(cand):
+                continue
+            if any(cand.distance_to(p) < 90 for p in avoid):
+                continue
+            return cand
+        return pg.Vector2(origin.x + 70, origin.y)
+
+    def _play_sfx(self, name):
+        if hasattr(self, 'sfx'):
+            try:
+                self.sfx.play(name)
+            except Exception:
+                pass
+
+    # ---------- On-Foot Update ----------
+    def _update_on_foot(self, events, dt):
+        dt_seconds = dt / 1000.0
+        if hasattr(self, 'sfx'):
+            self.sfx.ensure_music_playing()
+        # transiente Nachricht abklingen lassen
+        if self._foot_message:
+            self._foot_message = (self._foot_message[0], self._foot_message[1] - dt_seconds)
+            if self._foot_message[1] <= 0:
+                self._foot_message = None
+        # Events
+        for event in events:
+            if event.type != pg.KEYDOWN:
+                continue
+            if event.key == pg.K_ESCAPE:
+                if self.foot_ui is not None:
+                    self.foot_ui = None
+                    self._active_interactable = None
+                else:
+                    self.exit("pause")
+                return
+            elif event.key == pg.K_e:
+                if self.foot_ui is not None:
+                    self._confirm_foot_ui()
+                elif self.nearby_interactable is not None:
+                    self._open_interactable(self.nearby_interactable)
+                else:
+                    self.toggle_on_foot()
+                    return
+            elif event.key == pg.K_t and self.foot_ui is None:
+                # Von ueberall auf der Insel zurueck aufs Boot teleportieren
+                self._teleport_to_boat()
+                return
+            elif self.foot_ui is not None:
+                self._handle_panel_key(event.key)
+        # Panel offen -> Bewegung einfrieren
+        if self.foot_ui is not None:
+            if self.current_island:
+                for it in self.current_island.interactables:
+                    it.update(dt_seconds)
+            return
+        # Laufen (poll, 8-Richtungen, normalisiert)
+        keys = pg.key.get_pressed()
+        mv = pg.Vector2(keys[pg.K_d] - keys[pg.K_a], keys[pg.K_s] - keys[pg.K_w])
+        moving = mv.length_squared() > 0
+        if moving:
+            mv = mv.normalize()
+            self.foot_facing = mv
+            step = mv * self.foot_speed * dt_seconds
+            nx = self.player_foot_pos + pg.Vector2(step.x, 0)
+            if self.current_island is None or self.current_island.is_land(nx):
+                self.player_foot_pos = nx
+            ny = self.player_foot_pos + pg.Vector2(0, step.y)
+            if self.current_island is None or self.current_island.is_land(ny):
+                self.player_foot_pos = ny
+        self._foot_moving = moving
+        self.animation_timer += dt_seconds
+        # Proximity-Scan auf Interactables
+        self.nearby_interactable = None
+        best = float("inf")
+        if self.current_island:
+            for it in self.current_island.interactables:
+                it.update(dt_seconds)
+                d2 = self.player_foot_pos.distance_squared_to(it.pos)
+                if d2 < it.radius * it.radius and d2 < best:
+                    best = d2
+                    self.nearby_interactable = it
+        # Kamera folgt dem Spieler (RAW dt wie beim Segeln!)
+        self.camera_pos += (self.player_foot_pos - self.camera_pos) * min(1, dt * self.cam_lerp)
+
+    def _open_interactable(self, it):
+        self.foot_ui = it.kind
+        self._active_interactable = it
+        self._panel_index = 0
+
+    def _handle_panel_key(self, key):
+        it = self._active_interactable
+        if it is None:
+            return
+        options = it.payload if isinstance(it.payload, list) else []
+        n = len(options)
+        if n == 0:
+            return
+        if key in (pg.K_UP, pg.K_w):
+            self._panel_index = (self._panel_index - 1) % n
+        elif key in (pg.K_DOWN, pg.K_s):
+            self._panel_index = (self._panel_index + 1) % n
+        elif key in (pg.K_RETURN, pg.K_SPACE):
+            self._confirm_foot_ui()
+
+    def _confirm_foot_ui(self):
+        it = self._active_interactable
+        if it is None:
+            self.foot_ui = None
+            return
+        options = it.payload if isinstance(it.payload, list) else []
+        if not options:
+            self.foot_ui = None
+            return
+        idx = max(0, min(self._panel_index, len(options) - 1))
+        choice = options[idx]
+        if it.kind == "recruit":
+            if self.coins >= choice.price:
+                self.coins -= choice.price
+                self.crew.add_recruit(choice.role, choice.level, choice.name)
+                roster = load_crew_roster()
+                roster.append({"role": choice.role, "name": choice.name, "level": choice.level})
+                save_crew_roster(roster)
+                options.pop(idx)
+                self._foot_message = (f"{choice.name} angeheuert!", 2.0)
+                self._play_sfx('pickup')
+            else:
+                self._foot_message = ("Nicht genug Muenzen!", 1.5)
+        else:  # shipyard
+            if self.coins >= choice.price:
+                self.coins -= choice.price
+                entry = choice.to_fleet_entry()
+                self.fleet.append(entry)
+                self.active_ship_idx = len(self.fleet) - 1
+                save_fleet(self.fleet)
+                save_active_ship_idx(self.active_ship_idx)
+                options.pop(idx)
+                self._foot_message = (f"{choice.class_name} gekauft - ab naechstem Run aktiv!", 2.6)
+                self._play_sfx('pickup')
+            else:
+                self._foot_message = ("Nicht genug Muenzen!", 1.5)
+        if not options:
+            self.foot_ui = None
+            self._active_interactable = None
         else:
-            # Prüfe ob nahe an einer Insel
-            near_island = False
-            
-            # Hauptinsel prüfen - erweiterte Maske für größeren Bereich
-            insel_rect = self.insel.get_rect(topleft=(0, 0))
-            # Erweitere den Bereich um 200 Pixel
-            check_rect = insel_rect.inflate(400, 400)
-            if check_rect.collidepoint(self.cords_schiff1.x, self.cords_schiff1.y):
-                near_island = True
-            
-            # Extra-Inseln prüfen
-            if not near_island:
-                for island_data in self.extra_islands:
-                    island_pos = island_data[0]
-                    island_img = island_data[2]
-                    island_rect = island_img.get_rect(center=island_pos)
-                    check_rect = island_rect.inflate(400, 400)
-                    if check_rect.collidepoint(self.cords_schiff1.x, self.cords_schiff1.y):
-                        near_island = True
-                        break
-            
-            if near_island:
-                # Aussteigen - finde nächsten Land-Punkt
-                self.on_foot = True
-                
-                # Suche nach einem Land-Punkt in der Nähe des Schiffs
-                found_land = False
-                search_radius = 200  # Suche in 200 Pixel Radius
-                
-                for angle_deg in range(0, 360, 15):  # Alle 15 Grad
-                    for distance in range(50, search_radius, 20):  # Alle 20 Pixel
-                        angle_rad = angle_deg * 3.14159 / 180
-                        test_x = self.cords_schiff1.x + distance * pg.math.Vector2(1, 0).rotate_rad(angle_rad).x
-                        test_y = self.cords_schiff1.y + distance * pg.math.Vector2(1, 0).rotate_rad(angle_rad).y
-                        
-                        # Prüfe Haupt-Insel
-                        insel_rect = self.insel.get_rect(topleft=(0, 0))
-                        if insel_rect.collidepoint(test_x, test_y):
-                            local_x = int(test_x - insel_rect.left)
-                            local_y = int(test_y - insel_rect.top)
-                            if 0 <= local_x < self.insel.get_width() and 0 <= local_y < self.insel.get_height():
-                                if self.mask_insel.get_at((local_x, local_y)):
-                                    self.player_foot_pos = pg.Vector2(test_x, test_y)
-                                    found_land = True
-                                    break
-                        
-                        # Prüfe Extra-Inseln
-                        if not found_land:
-                            for island_pos, _, island_img in self.extra_islands:
-                                island_rect = island_img.get_rect(center=island_pos)
-                                if island_rect.collidepoint(test_x, test_y):
-                                    island_mask = pg.mask.from_surface(island_img)
-                                    local_x = int(test_x - island_rect.left)
-                                    local_y = int(test_y - island_rect.top)
-                                    if 0 <= local_x < island_img.get_width() and 0 <= local_y < island_img.get_height():
-                                        if island_mask.get_at((local_x, local_y)):
-                                            self.player_foot_pos = pg.Vector2(test_x, test_y)
-                                            found_land = True
-                                            break
-                    
-                    if found_land:
-                        break
-                
-                # Falls kein Land gefunden wurde (sollte nicht passieren), benutze Schiffsposition
-                if not found_land:
-                    self.player_foot_pos = self.cords_schiff1.copy()
-    
+            self._panel_index = min(self._panel_index, len(options) - 1)
+
+    def _fill_ocean(self, camera_surface, w, h, sx, sy):
+        """Fuellt die Kamera-Surface komplett mit gekacheltem Ozean.
+        Kachelanzahl richtet sich nach der Bildschirmgroesse, damit bei
+        grossen Fenstern/Zoom keine Raender frei bleiben; eine Grundfarbe
+        verhindert Luecken bei Zoom oder Screen-Shake."""
+        if not hasattr(self, '_ocean_bg_color'):
+            self._ocean_bg_color = self.tiles[0].get_at((32, 32))
+        camera_surface.fill(self._ocean_bg_color)
+        tile = int(time() * 2)
+        ox, oy = int(sx) % 64, int(sy) % 64
+        cols = w // 64 + 3
+        rows = h // 64 + 3
+        for i in range(cols):
+            for j in range(rows):
+                pos = (64 * i - 64 - ox, 64 * j - 64 - oy)
+                camera_surface.blit(self.tiles[(tile + i) % 4], pos)
+
+    # ---------- On-Foot Rendering ----------
+    def _draw_on_foot(self, s, w, h):
+        camera_surface = pg.Surface((w, h), pg.SRCALPHA)
+        center = pg.Vector2(w // 2, h // 2)
+        # Ozean (scrollt mit Kamera, deckt den ganzen Bildschirm ab)
+        sx, sy = int(self.camera_pos.x), int(self.camera_pos.y)
+        self._fill_ocean(camera_surface, w, h, sx, sy)
+        # Hauptinsel
+        insel_pos = pg.Vector2(0, 0) - self.camera_pos + center
+        camera_surface.blit(self.insel, insel_pos)
+        # Extra-Inseln
+        for island_pos, _scale, island_img, _m in self.extra_islands:
+            sp = island_pos - self.camera_pos + center
+            camera_surface.blit(island_img, island_img.get_rect(center=sp))
+        # Steine (mit Culling)
+        for rock_pos, rock_img, _m in self.rocks:
+            if abs(rock_pos.x - self.camera_pos.x) > w // 2 + 100 or abs(rock_pos.y - self.camera_pos.y) > h // 2 + 100:
+                continue
+            sp = rock_pos - self.camera_pos + center
+            camera_surface.blit(rock_img, rock_img.get_rect(center=sp))
+        # Das gemoorte Schiff (zum Wiedereinsteigen sichtbar)
+        ship_sp = self.cords_schiff1 - self.camera_pos + center
+        camera_surface.blit(self.schiff2, self.schiff2.get_rect(center=ship_sp))
+        # Interactables (NPCs/Gebaeude)
+        offset = self.camera_pos - center
+        if self.current_island:
+            for it in self.current_island.interactables:
+                it.draw(camera_surface, offset)
+        # Avatar
+        self._draw_foot_avatar(camera_surface, w, h)
+        s.blit(camera_surface, (0, 0))
+        # Interaktions-Prompts
+        if self.foot_ui is None:
+            if self.nearby_interactable is not None:
+                label = "anheuern" if self.nearby_interactable.kind == "recruit" else "Werft"
+                sp = self.nearby_interactable.pos - self.camera_pos + center
+                self._draw_prompt(s, sp, f"[E] {label}")
+            elif self.player_foot_pos.distance_to(self.cords_schiff1) < 100:
+                sp = self.cords_schiff1 - self.camera_pos + center
+                self._draw_prompt(s, sp, "[E] An Bord")
+        # Panels
+        if self.foot_ui == "recruit":
+            self._draw_recruit_panel(s, w, h)
+        elif self.foot_ui == "shipyard":
+            self._draw_shipyard_panel(s, w, h)
+        # HUD
+        self._draw_foot_hud(s, w, h)
+
+    def _load_pirate_frames(self, scale=1):
+        """Laedt die Piraten-Frames aus dem Sprite-Sheet (identisch zum Quit-Dialog)."""
+        try:
+            sheet = pg.image.load("assets/pirate.png").convert()
+        except Exception:
+            return []
+        bg = sheet.get_at((sheet.get_width() // 2, 2))  # Hintergrund-Farbe
+        lefts, top, cw, ch = (165, 251, 336, 422), 548, 86, 88
+        frames = []
+        for lx in lefts:
+            cell = pg.Surface((cw, ch), pg.SRCALPHA)
+            cell.blit(sheet, (0, 0), pg.Rect(lx, top, cw, ch))
+            # Grauen Hintergrund + weichen Schlagschatten ausschneiden (Toleranz)
+            cell.lock()
+            for y in range(ch):
+                for x in range(cw):
+                    r, g, b, _ = cell.get_at((x, y))
+                    if abs(r - bg[0]) + abs(g - bg[1]) + abs(b - bg[2]) < 78:
+                        cell.set_at((x, y), (0, 0, 0, 0))
+            cell.unlock()
+            bb = cell.get_bounding_rect()
+            if bb.width == 0:
+                continue
+            frame = pg.Surface(bb.size, pg.SRCALPHA)
+            frame.blit(cell, (0, 0), bb)
+            if scale != 1:
+                frame = pg.transform.scale(frame, (bb.width * scale, bb.height * scale))
+            frames.append(frame)
+        return frames
+
+    def _draw_foot_avatar(self, surface, w, h):
+        center = pg.Vector2(w // 2, h // 2)
+        sp = self.player_foot_pos - self.camera_pos + center
+        ix, iy = int(sp.x), int(sp.y)
+        # Piraten-Sprite wie im Quit-Dialog verwenden
+        frames = getattr(self, "pirate_frames", None)
+        if frames:
+            # Beim Laufen leicht wippen lassen, im Stehen ruhig animieren
+            idx = int(self.animation_timer * 6) % len(frames)
+            bob = int(math.sin(self.animation_timer * 12) * 3) if self._foot_moving else 0
+            frame = frames[idx]
+            if self.foot_facing.x < 0:
+                frame = pg.transform.flip(frame, True, False)
+            fw, fh = frame.get_width(), frame.get_height()
+            # Boden-Schatten
+            shadow = pg.Surface((int(fw * 0.6), int(fh * 0.16)), pg.SRCALPHA)
+            pg.draw.ellipse(shadow, (0, 0, 0, 110), shadow.get_rect())
+            surface.blit(shadow, (ix - int(fw * 0.3), iy + int(fh * 0.42)))
+            surface.blit(frame, (int(ix - fw / 2), int(iy - fh / 2 + bob)))
+            return
+        # Boden-Schatten (Fallback)
+        shadow = pg.Surface((28, 10), pg.SRCALPHA)
+        pg.draw.ellipse(shadow, (0, 0, 0, 110), shadow.get_rect())
+        surface.blit(shadow, (ix - 14, iy + 12))
+        frames = self.walk_frames if self._foot_moving else self.idle_frames
+        if frames:
+            idx = int(self.animation_timer / self.animation_speed) % len(frames)
+            frame = frames[idx]
+            if self.foot_facing.x < 0:
+                frame = pg.transform.flip(frame, True, False)
+            surface.blit(frame, frame.get_rect(center=(ix, iy)))
+        else:
+            pg.draw.circle(surface, (240, 220, 60), (ix, iy), 10)
+
+    def _draw_prompt(self, surface, screen_pos, text):
+        txt = self.font_small.render(text, True, (255, 255, 255))
+        pad = 8
+        bob = int(math.sin(time() * 4) * 2)
+        bw = txt.get_width() + pad * 2
+        bh = txt.get_height() + pad
+        bx = int(screen_pos.x - bw // 2)
+        by = int(screen_pos.y - 56 + bob)
+        panel = pg.Surface((bw, bh), pg.SRCALPHA)
+        pg.draw.rect(panel, (18, 24, 40, 225), panel.get_rect(), border_radius=8)
+        pg.draw.rect(panel, (120, 200, 255), panel.get_rect(), 2, border_radius=8)
+        panel.blit(txt, (pad, pad // 2))
+        surface.blit(panel, (bx, by))
+        tipx = int(screen_pos.x)
+        pg.draw.polygon(surface, (120, 200, 255), [(tipx - 5, by + bh), (tipx + 5, by + bh), (tipx, by + bh + 6)])
+
+    def _panel_chrome(self, surface, w, h, title_text):
+        pw, ph = 480, 330
+        px, py = (w - pw) // 2, (h - ph) // 2
+        panel = pg.Surface((pw, ph), pg.SRCALPHA)
+        pg.draw.rect(panel, (16, 20, 36, 240), panel.get_rect(), border_radius=12)
+        pg.draw.rect(panel, (120, 200, 255), panel.get_rect(), 2, border_radius=12)
+        surface.blit(panel, (px, py))
+        title = self.font_title.render(title_text, True, (120, 200, 255))
+        surface.blit(title, (px + 20, py + 14))
+        gem_txt = self.font_main.render(f"Muenzen: {self.coins}", True, (255, 210, 80))
+        surface.blit(gem_txt, (px + pw - gem_txt.get_width() - 20, py + 20))
+        hint = self.font_small.render("Pfeile waehlen   [E]/Enter bestaetigen   [Esc] schliessen", True, (180, 190, 210))
+        surface.blit(hint, (px + 20, py + ph - 28))
+        return px, py, pw, ph
+
+    def _draw_recruit_panel(self, surface, w, h):
+        px, py, pw, ph = self._panel_chrome(surface, w, h, "Taverne - Crew anheuern")
+        it = self._active_interactable
+        options = it.payload if it and isinstance(it.payload, list) else []
+        if not options:
+            none_txt = self.font_main.render("Niemand mehr verfuegbar.", True, (200, 200, 200))
+            surface.blit(none_txt, (px + 24, py + 90))
+        else:
+            for i, rec in enumerate(options):
+                row_y = py + 74 + i * 52
+                sel = (i == self._panel_index)
+                if sel:
+                    pg.draw.rect(surface, (40, 60, 92), (px + 12, row_y - 6, pw - 24, 46), border_radius=6)
+                role_name = CrewMember.ROLES.get(rec.role, {}).get('name', rec.role)
+                lvl_name = CrewRecruit.LEVEL_NAMES.get(rec.level, str(rec.level))
+                afford = self.coins >= rec.price
+                col = (235, 235, 235) if afford else (150, 110, 110)
+                surface.blit(self.font_main.render(f"{rec.name} - {lvl_name} {role_name}", True, col), (px + 26, row_y))
+                price = self.font_main.render(f"{rec.price} M", True, (255, 210, 80) if afford else (150, 110, 110))
+                surface.blit(price, (px + pw - price.get_width() - 26, row_y))
+        self._draw_foot_message(surface, w, h)
+
+    def _draw_shipyard_panel(self, surface, w, h):
+        px, py, pw, ph = self._panel_chrome(surface, w, h, "Werft - Schiff kaufen")
+        it = self._active_interactable
+        options = it.payload if it and isinstance(it.payload, list) else []
+        if not options:
+            none_txt = self.font_main.render("Ausverkauft.", True, (200, 200, 200))
+            surface.blit(none_txt, (px + 24, py + 90))
+        else:
+            for i, off in enumerate(options):
+                row_y = py + 70 + i * 56
+                sel = (i == self._panel_index)
+                if sel:
+                    pg.draw.rect(surface, (40, 60, 92), (px + 12, row_y - 6, pw - 24, 50), border_radius=6)
+                afford = self.coins >= off.price
+                col = (235, 235, 235) if afford else (150, 110, 110)
+                surface.blit(self.font_main.render(off.class_name, True, col), (px + 26, row_y))
+                stats = f"HP x{off.hp_mult:.1f}  Spd x{off.speed_mult:.2f}  Dmg x{off.dmg_mult:.1f}"
+                surface.blit(self.font_small.render(stats, True, (170, 190, 210)), (px + 26, row_y + 24))
+                price = self.font_main.render(f"{off.price} M", True, (255, 210, 80) if afford else (150, 110, 110))
+                surface.blit(price, (px + pw - price.get_width() - 26, row_y + 8))
+        self._draw_foot_message(surface, w, h)
+
+    def _draw_foot_hud(self, surface, w, h):
+        coin_txt = self.font_main.render(f"Muenzen: {self.coins}", True, (255, 210, 80))
+        surface.blit(coin_txt, (16, 14))
+        gem_txt = self.font_small.render(f"Gems: {self.total_gems}", True, (200, 200, 210))
+        surface.blit(gem_txt, (16 + coin_txt.get_width() + 20, 22))
+        res = len(self.crew.reserves) if hasattr(self, 'crew') else 0
+        mode_txt = self.font_small.render(f"An Land  -  WASD laufen, [E] interagieren, [T] zum Boot  |  Reserve-Crew: {res}", True, (220, 230, 245))
+        surface.blit(mode_txt, (16, 46))
+        self._draw_foot_message(surface, w, h)
+
+    def _draw_foot_message(self, surface, w, h):
+        msg = self._foot_message
+        if not msg:
+            return
+        m = self.font_main.render(msg[0], True, (255, 220, 120))
+        bx = (w - m.get_width()) // 2
+        by = h - 84
+        bg = pg.Surface((m.get_width() + 24, m.get_height() + 12), pg.SRCALPHA)
+        pg.draw.rect(bg, (20, 16, 8, 210), bg.get_rect(), border_radius=8)
+        surface.blit(bg, (bx - 12, by - 6))
+        surface.blit(m, (bx, by))
+
     def get_difficulty(self):
         """Berechnet die aktuelle Schwierigkeit basierend auf Survival-Zeit"""
         # Startet bei 1.0, erhöht sich alle 60 Sekunden um 0.5
         # Nach 5 Minuten: 3.5x Stärke
         minutes_survived = self.survival_time / 60.0
         return 1.0 + (minutes_survived * 0.5)
-    
+
+    def get_enemy_damage_mult(self):
+        """Schaden der NPC-Boote steigt nach einer bestimmten Zeit mit der Überlebensdauer.
+        Erste 60s normal, danach alle 60s +25% (maximal x3)."""
+        if self.survival_time < 60:
+            return 1.0
+        extra = (self.survival_time - 60) / 60.0 * 0.25
+        return min(3.0, 1.0 + extra)
+
+
     def _scale_living_npcs(self):
         """Skaliert lebende NPCs zur aktuellen Schwierigkeit (alle 10 Sekunden)"""
         difficulty = self.get_difficulty()
@@ -2436,8 +3507,7 @@ class PlayState(State):
     
     def restart_game(self):
         """Startet das Spiel neu"""
-        # Perks laden und auf Basis-Werte anwenden
-        perks = load_perks()
+        # Ausgewählte Piratenklasse laden
         selected_pirate_id = load_selected_pirate_id()
         self.unlocked_pirates = load_unlocked_pirate_ids()
         if selected_pirate_id not in self.unlocked_pirates:
@@ -2448,31 +3518,33 @@ class PlayState(State):
         self.achievement_state = load_achievement_state()
         self.achievement_popups = []
         self.achievement_save_timer = 0.0
-        hull_lvl = perks.get('hull', 0)
-        cannons_lvl = perks.get('cannons', 0)
-        sails_lvl = perks.get('sails', 0)
-        repair_lvl = perks.get('repair', 0)
-        reload_lvl = perks.get('reload', 0)
-        self.xp_boost_perk = perks.get('xp_boost', 0)  # Für XP-Berechnung speichern
-        
+
+        # Flotte + aktives Flaggschiff aus dem Save laden
+        self.fleet = load_fleet()
+        self.active_ship_idx = load_active_ship_idx()
+        if not (0 <= self.active_ship_idx < len(self.fleet)):
+            self.active_ship_idx = 0
+
+        self.xp_boost_perk = 0  # Perk-System entfernt
+
         # Talent-Boni laden
         self.talent_bonuses = get_all_talent_bonuses()
-        
-        # Basis-Werte mit Perks + Talent-Boni
+
+        # Basis-Werte mit Talent-Boni
         talent_hp = self.talent_bonuses.get('max_hp_bonus', 0)
         talent_dmg = self.talent_bonuses.get('damage_bonus', 0)
         talent_spd = self.talent_bonuses.get('speed_bonus', 0)
         talent_regen = self.talent_bonuses.get('regen_bonus', 0)
         talent_fire = self.talent_bonuses.get('fire_rate_bonus', 0)
         talent_all = self.talent_bonuses.get('all_stats_bonus', 0)
-        
-        self.base_max_health = int((100 + hull_lvl * 20 + talent_hp) * (1 + talent_all))
-        self.base_damage = int((25 + cannons_lvl * 10) * (1 + talent_dmg + talent_all))
-        self.base_speed = int(300 * (1 + sails_lvl * 0.10 + talent_spd + talent_all))
-        self.base_speed_back = int(150 * (1 + sails_lvl * 0.10 + talent_spd + talent_all))
+
+        self.base_max_health = int((100 + talent_hp) * (1 + talent_all))
+        self.base_damage = int(25 * (1 + talent_dmg + talent_all))
+        self.base_speed = int(300 * (1 + talent_spd + talent_all))
+        self.base_speed_back = int(150 * (1 + talent_spd + talent_all))
         self.base_regen = 0
-        self.base_repair_rate = (2.5 + repair_lvl * 1.0 + talent_regen) * (1 + talent_all)
-        self.base_shoot_cooldown = 0.45 * (0.90 ** reload_lvl) * (1 - talent_fire)
+        self.base_repair_rate = (2.5 + talent_regen) * (1 + talent_all)
+        self.base_shoot_cooldown = 0.45 * (1 - talent_fire)
 
         # Piraten-Boni und Debuffs anwenden
         self.base_max_health = int(self.base_max_health * pirate['max_hp_mult'])
@@ -2481,7 +3553,19 @@ class PlayState(State):
         self.base_speed_back = int(self.base_speed_back * pirate['speed_mult'])
         self.base_repair_rate = self.base_repair_rate * pirate['repair_mult']
         self.base_shoot_cooldown = self.base_shoot_cooldown * pirate['reload_mult']
-        
+
+        # Verteidigung (reduziert erlittenen Schaden) & Ausweichen (Chance zu dodgen)
+        self.defense = min(0.9, pirate.get('defense', 0.0))
+        self.evasion = min(0.9, pirate.get('evasion', 0.0))
+
+        # Aktives Flaggschiff: Stat-Multiplikatoren der Flotte anwenden
+        active_ship = self.fleet[self.active_ship_idx] if (self.fleet and 0 <= self.active_ship_idx < len(self.fleet)) else None
+        if active_ship:
+            self.base_max_health = int(self.base_max_health * active_ship.get('hp_mult', 1.0))
+            self.base_damage = int(self.base_damage * active_ship.get('dmg_mult', 1.0))
+            self.base_speed = int(self.base_speed * active_ship.get('speed_mult', 1.0))
+            self.base_speed_back = int(self.base_speed_back * active_ship.get('speed_mult', 1.0))
+
         self.health = self.base_max_health
         self.is_dead = False
         self.death_timer = 0
@@ -2491,7 +3575,16 @@ class PlayState(State):
         self.cords_schiff1 = pg.Vector2(insel_w + 200, insel_h // 2)
         self.schiff_richtung = 0
         self.camera_pos = pg.Vector2(self.cords_schiff1)
-        
+
+        # On-Foot-Modus für neuen Run zurücksetzen
+        self.on_foot = False
+        self.foot_ui = None
+        self.current_island = None
+        self.nearby_interactable = None
+        self._active_interactable = None
+        self.player_foot_pos = pg.Vector2(0, 0)
+        self._foot_message = None
+
         # Island status zurücksetzen und neue Schiffe generieren
         self.island_ship_status = [(pg.Vector2(insel_w // 2, insel_h // 2), True)]
         self.npc_ships = self.generate_npc_ships()
@@ -2508,6 +3601,7 @@ class PlayState(State):
         self.max_health_level = 0
         self.damage_level = 0
         self.kills = 0
+        self.coins = 0  # Muenzen jeden Run zuruecksetzen
         self.is_new_highscore = False
         self.highscore = load_highscore()  # Highscore neu laden
         self.explored_cells = set()  # Fog of War zurücksetzen
@@ -2531,7 +3625,10 @@ class PlayState(State):
         
         # Crew zurücksetzen für neuen Run
         self.crew = ShipCrew()
-        
+        # Permanentes Crew-Roster (auf Inseln angeheuert) als Reserve übernehmen
+        for r in load_crew_roster():
+            self.crew.add_recruit(r.get('role', 'boatswain'), r.get('level', 1), r.get('name'))
+
         # XP Booster laden (aus Login-Streak)
         booster_minutes = load_xp_booster()
         self.xp_booster_remaining = booster_minutes * 60.0  # In Sekunden umwandeln
@@ -2553,7 +3650,11 @@ class PlayState(State):
     def update(self, events, dt):
         # dt in Sekunden umrechnen
         dt_seconds = dt / 1000.0
-        
+
+        # An Land (zu Fuß): eigener Update-Zweig, friert Segeln/Kampf ein
+        if self.on_foot:
+            return self._update_on_foot(events, dt)
+
         # Musik am Laufen halten (falls Kanal unerwartet stoppt)
         if hasattr(self, 'sfx'):
             self.sfx.ensure_music_playing()
@@ -2597,7 +3698,19 @@ class PlayState(State):
         # Damage Cooldown
         if self.damage_cooldown > 0:
             self.damage_cooldown -= dt_seconds
-        
+
+        # Schild-Artefakt: laedt nach kurzer Ruhe wieder auf
+        if self.crate_bonus_max_shield > 0:
+            self.shield_regen_timer += dt_seconds
+            if self.shield_regen_timer >= 2.0 and self.shield < self.crate_bonus_max_shield:
+                self.shield = min(self.crate_bonus_max_shield, self.shield + 8 * dt_seconds)
+
+        # Artefakt-Sammel-Popup ausblenden
+        if self.artifact_popup is not None:
+            self.artifact_popup['timer'] -= dt_seconds
+            if self.artifact_popup['timer'] <= 0:
+                self.artifact_popup = None
+
         # This is an example for handling events
         # and changing states
         for event in events:
@@ -2621,6 +3734,9 @@ class PlayState(State):
                 elif event.key == pg.K_d:
                     self.schiff_richtung += 1
                     self.schiff_richtung %= 8
+                elif event.key == pg.K_e:
+                    # Aussteigen, wenn das Schiff nahe an einer Insel liegt
+                    self.toggle_on_foot()
                 # Upgrade-Tasten
                 elif event.key == pg.K_1 and self.skill_points > 0:
                     self.speed_level += 1
@@ -2696,6 +3812,7 @@ class PlayState(State):
         current_repair_rate += self.crate_bonus_regen
         current_max_health += self.crate_bonus_max_health
         current_damage += self.crate_bonus_damage
+        current_damage = int(current_damage * (1 + self.crate_bonus_damage_pct))
 
         # Schadensmodell: Je kaputter der Rumpf, desto schwächer und langsamer
         hp_ratio = max(0.0, min(1.0, self.health / max(1, current_max_health)))
@@ -2852,12 +3969,16 @@ class PlayState(State):
             self.shoot_cooldown -= dt_seconds
         
         if pg.key.get_pressed()[pg.K_SPACE] and self.shoot_cooldown <= 0 and not self.repairing and can_shoot:
-            # Breitseite schießen (links und rechts)
+            # Breitseite schießen (links und rechts), inkl. Multishot-Artefakte
             shoot_dir = richtungen[self.schiff_richtung]
             left_dir = pg.Vector2(-shoot_dir.y, shoot_dir.x)
             right_dir = pg.Vector2(shoot_dir.y, -shoot_dir.x)
-            self.cannonballs.append(Cannonball(self.cords_schiff1, left_dir))
-            self.cannonballs.append(Cannonball(self.cords_schiff1, right_dir))
+            shots_per_side = 1 + self.crate_bonus_extra_shots
+            for base_dir in (left_dir, right_dir):
+                for i in range(shots_per_side):
+                    # Faecher-Streuung bei mehreren Schuessen
+                    spread = 0.0 if shots_per_side == 1 else (i - (shots_per_side - 1) / 2) * 9.0
+                    self.cannonballs.append(self._make_player_ball(self.cords_schiff1, base_dir.rotate(spread)))
             self.shoot_cooldown = current_shoot_cooldown
             if hasattr(self, 'sfx'):
                 self.sfx.play('cannon')
@@ -2924,6 +4045,12 @@ class PlayState(State):
                 # Spieler zurücksetzen
                 self.cords_schiff1 = old_cords
                 self.take_damage(5)
+                # Ramm-Schaden-Artefakt: Gegner bei Kontakt beschaedigen
+                if self.crate_bonus_ram_damage > 0:
+                    npc_ship.health -= self.crate_bonus_ram_damage
+                    self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -30), self.crate_bonus_ram_damage, (255, 200, 120)))
+                    if npc_ship.health <= 0:
+                        self._kill_enemy(npc_ship)
                 # NPC wegschubsen
                 push_dir = npc_ship.pos - self.cords_schiff1
                 if push_dir.length() > 0:
@@ -2963,102 +4090,76 @@ class PlayState(State):
         for ball in self.cannonballs:
             if ball.is_dead or ball.is_enemy:
                 continue
+            ball_hit_ids = getattr(ball, 'hit_ids', None)
             for npc_ship in self.npc_ships:
                 if npc_ship.is_dead:
+                    continue
+                # Bereits von dieser (durchschlagenden) Kugel getroffen?
+                if ball_hit_ids is not None and id(npc_ship) in ball_hit_ids:
                     continue
                 # Pixel-perfekte Hitbox mit Mask-Kollision
                 npc_img = npc_ship.get_image()
                 npc_rect = npc_img.get_rect(center=npc_ship.pos)
-                # Kugel als kleiner Kreis (Radius 10)
-                ball_rect = pg.Rect(int(ball.pos.x) - 10, int(ball.pos.y) - 10, 20, 20)
-                
+                ball_r = getattr(ball, 'radius', 10)
+                ball_rect = pg.Rect(int(ball.pos.x) - ball_r, int(ball.pos.y) - ball_r, ball_r * 2, ball_r * 2)
+
                 # Schneller Rect-Check zuerst (Performance)
                 if not npc_rect.inflate(20, 20).colliderect(ball_rect):
                     continue
-                
-                # Mask-basierte Kollision (gecachte Masken)
-                npc_mask = npc_ship.get_mask()
-                # Feste Hitbox pro Schiff (Boss hat stabile Radius-Hitbox)
-                hit_radius = getattr(npc_ship, 'hit_radius', 46)
+
+                # Feste Hitbox pro Schiff (groessere Kugeln = groessere Reichweite)
+                hit_radius = getattr(npc_ship, 'hit_radius', 46) + (ball_r - 10)
                 if ball.pos.distance_squared_to(npc_ship.pos) <= hit_radius * hit_radius:
-                    npc_ship.health -= current_damage  # Schaden basierend auf Upgrade
-                    ball.is_dead = True
-                    
+                    # Kritischer Treffer (Artefakt)
+                    hit_dmg = current_damage
+                    is_crit = self.crate_bonus_crit_chance > 0 and random.random() < self.crate_bonus_crit_chance
+                    if is_crit:
+                        hit_dmg = int(hit_dmg * (2.0 + self.crate_bonus_crit_mult))
+                    npc_ship.health -= hit_dmg
+
+                    # Lebensraub-Artefakt
+                    if self.crate_bonus_lifesteal > 0:
+                        self._heal(hit_dmg * self.crate_bonus_lifesteal)
+
+                    # Durchschlag-Artefakt: Kugel merkt sich Treffer und lebt weiter
+                    if ball_hit_ids is None:
+                        ball.hit_ids = ball_hit_ids = set()
+                    ball_hit_ids.add(id(npc_ship))
+                    if getattr(ball, 'pierce', 0) > 0:
+                        ball.pierce -= 1
+                    else:
+                        ball.is_dead = True
+
                     # === PREMIUM EFFEKTE ===
-                    # Explosion bei Treffer
                     self.explosions.append(ExplosionEffect(ball.pos, color=(255, 150, 50), size=25))
-                    # Schadenszahl
-                    self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -30), current_damage, (255, 255, 0)))
-                    # Screen Shake
+                    if is_crit:
+                        self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -34), hit_dmg, (255, 130, 40), text=f"{hit_dmg}!"))
+                    else:
+                        self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -30), hit_dmg, (255, 255, 0)))
                     self.screen_shake = 0.15
                     self.screen_shake_intensity = 5
                     if hasattr(self, 'sfx'):
                         self.sfx.play('hit')
-                    
+
+                    # Explosivmunition-Artefakt: AoE-Schaden auf Gegner in der Naehe
+                    explosive = getattr(ball, 'explosive', 0)
+                    if explosive > 0:
+                        self.explosions.append(ExplosionEffect(ball.pos, color=(255, 120, 40), size=int(explosive * 0.6)))
+                        aoe_dmg = max(1, int(hit_dmg * 0.5))
+                        for other in self.npc_ships:
+                            if other is npc_ship or other.is_dead:
+                                continue
+                            if ball.pos.distance_squared_to(other.pos) <= explosive * explosive:
+                                other.health -= aoe_dmg
+                                self.damage_numbers.append(DamageNumber(other.pos + pg.Vector2(0, -30), aoe_dmg, (255, 170, 80)))
+                                if other.health <= 0:
+                                    self._kill_enemy(other)
+
                     if npc_ship.health <= 0:
-                        npc_ship.is_dead = True
-                        self.kills += 1  # Kill-Counter erhöhen
-                        if hasattr(self, 'achievement_state'):
-                            self.achievement_state['total_kills'] = int(self.achievement_state.get('total_kills', 0)) + 1
-                            self._check_achievements()
-                        # Große Explosion beim Tod
-                        self.explosions.append(ExplosionEffect(npc_ship.pos, color=(255, 100, 30), size=40))
-                        self.screen_shake = 0.3
-                        self.screen_shake_intensity = 12
-                        if hasattr(self, 'sfx'):
-                            self.sfx.play('explosion')
-                        
-                        # Prüfe ob alle Schiffe dieser Insel tot sind
-                        if hasattr(npc_ship, 'home_island'):
-                            island_idx = npc_ship.home_island
-                            all_dead = True
-                            for other_ship in self.npc_ships:
-                                if hasattr(other_ship, 'home_island') and other_ship.home_island == island_idx and not other_ship.is_dead:
-                                    all_dead = False
-                                    break
-                            if all_dead and island_idx < len(self.island_ship_status):
-                                # Markiere dass diese Insel keine Schiffe mehr hat
-                                island_pos, _ = self.island_ship_status[island_idx]
-                                self.island_ship_status[island_idx] = (island_pos, False)
-                        
-                        # EXP geben - skaliert mit Schwierigkeit + XP-Boost Perk
-                        difficulty = self.get_difficulty()
-                        if npc_ship.is_boss:
-                            # Boss-Kill: direktes Level-Up statt riesigem XP-Spike
-                            self.level += 1
-                            self.skill_points += 2
-                            self.exp = 0
-                            self.exp_to_level = int(self.exp_to_level * 1.35)
-                            self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -50), 1, (255, 230, 120)))
-                            self.achievement_popups.append({'text': 'Boss defeated: Instant Level Up!', 'timer': 4.0})
-                            if self.boss_arena is not None and self.boss_arena.get('boss') is npc_ship:
-                                self._end_boss_arena()
-                        else:
-                            base_exp = 25
-                            xp_multiplier = 1.0 + getattr(self, 'xp_boost_perk', 0) * 0.15
-                            # Temporärer XP-Booster aus Login-Streak (verdoppelt)
-                            if getattr(self, 'xp_booster_active', False) and getattr(self, 'xp_booster_remaining', 0) > 0:
-                                xp_multiplier *= 2.0
-                            scaled_exp = int(base_exp * difficulty * xp_multiplier)
-                            self.exp += scaled_exp
-                            # Zeige XP-Zahl
-                            self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -50), scaled_exp, (50, 200, 255)))
-                        
-                        # Boss gibt 20 Gems!
-                        if npc_ship.is_boss:
-                            self.total_gems += 20
-                            save_gems(self.total_gems)
-                            self.damage_numbers.append(DamageNumber(npc_ship.pos + pg.Vector2(0, -80), 20, (255, 220, 50)))
-                            self.screen_shake = 0.5
-                            self.screen_shake_intensity = 20
-                        while self.exp >= self.exp_to_level:
-                            self.exp -= self.exp_to_level
-                            self.level += 1
-                            self.exp_to_level = int(self.exp_to_level * 1.5)  # Mehr EXP für nächstes Level
-                            self.skill_points += 1  # Skill-Punkt bei Level-Up
-                            if hasattr(self, 'sfx'):
-                                self.sfx.play('levelup')
-                    break
+                        self._kill_enemy(npc_ship)
+
+                    if ball.is_dead:
+                        break
         
         # Feindliche Kugeln gegen Spieler prüfen
         for ball in self.cannonballs:
@@ -3067,7 +4168,9 @@ class PlayState(State):
             # Distanz zum Spieler
             dist = ball.pos.distance_to(self.cords_schiff1)
             if dist < 40:  # Treffer-Radius
-                hit_damage = getattr(ball, 'boss_damage', 10)
+                base_hit = getattr(ball, 'boss_damage', 10)
+                # Schaden der NPC-Boote steigt mit der Zeit
+                hit_damage = max(1, int(round(base_hit * self.get_enemy_damage_mult())))
                 self.take_damage(hit_damage)  # Schaden je nach Quelle
                 ball.is_dead = True
                 # Explosion und Shake bei Treffer auf Spieler
@@ -3079,15 +4182,18 @@ class PlayState(State):
         # Tote Kugeln entfernen
         self.cannonballs = [b for b in self.cannonballs if not b.is_dead]
         
+        # Aufsammel-Radius (Basis + Ausguck-Artefakt)
+        pickup_bonus = self.crate_bonus_pickup_radius
+
         # Gems aktualisieren und Kollision prüfen
         for gem in self.gems:
             if gem.collected:
                 continue
             gem.update(dt_seconds)
-            
+
             # Kollision mit Spieler
             dist = gem.pos.distance_to(self.cords_schiff1)
-            if dist < 50:  # Einsammel-Radius
+            if dist < 50 + pickup_bonus:  # Einsammel-Radius
                 gem.collected = True
                 self.total_gems += 1
                 save_gems(self.total_gems)  # Sofort speichern
@@ -3100,16 +4206,16 @@ class PlayState(State):
                 continue
             crate.update(dt_seconds)
 
-            if crate.pos.distance_to(self.cords_schiff1) < 55:
+            if crate.pos.distance_to(self.cords_schiff1) < 55 + pickup_bonus:
                 crate.collected = True
                 self._apply_random_crate_item()
                 if hasattr(self, 'sfx'):
-                    self.sfx.play('levelup')
+                    self.sfx.play('perk_buy')
 
-                boosted_max_hp = self.base_max_health + self.max_health_level * 20 + self.crate_bonus_max_health
+                boosted_max_hp = self._current_max_health()
                 if self.health > boosted_max_hp:
                     self.health = boosted_max_hp
-        
+
         # Gelegentlich neue Gems spawnen (sehr selten)
         self.gem_spawn_timer += dt_seconds
         if self.gem_spawn_timer >= self.gem_spawn_interval:
@@ -3124,22 +4230,23 @@ class PlayState(State):
                         break
                 self.gems.append(Gem(pg.Vector2(x, y)))
 
-        # Neue Kisten spawnen (selten)
+        # Alle 30 Sekunden eine neue Kiste irgendwo auf dem Wasser spawnen
         self.crate_spawn_timer += dt_seconds
         if self.crate_spawn_timer >= self.crate_spawn_interval:
             self.crate_spawn_timer = 0
-            if random.random() < 0.16:
-                insel_w, insel_h = self.insel.get_size()
-                while True:
-                    x = random.randint(-int(self.world_size.x // 2), int(self.world_size.x // 2))
-                    y = random.randint(-int(self.world_size.y // 2), int(self.world_size.y // 2))
-                    pos = pg.Vector2(x, y)
-                    if 0 < x < insel_w and 0 < y < insel_h:
-                        continue
-                    if pos.distance_to(self.cords_schiff1) < 300:
-                        continue
-                    break
-                self.crates.append(StatCrate(pos))
+            insel_w, insel_h = self.insel.get_size()
+            attempts = 0
+            while attempts < 100:
+                attempts += 1
+                x = random.randint(-int(self.world_size.x // 2), int(self.world_size.x // 2))
+                y = random.randint(-int(self.world_size.y // 2), int(self.world_size.y // 2))
+                pos = pg.Vector2(x, y)
+                if 0 < x < insel_w and 0 < y < insel_h:
+                    continue
+                if pos.distance_to(self.cords_schiff1) < 300:
+                    continue
+                break
+            self.crates.append(StatCrate(pos))
         
         # Respawn-Timer für tote NPCs
         insel_size = self.insel.get_size()
@@ -3234,16 +4341,17 @@ class PlayState(State):
         # rect = self.text.get_rect(center = (w//2, h//2))
 
         w, h = s.get_size()
+
+        # An Land: eigener Zeichen-Zweig (Insel-Erkundung)
+        if self.on_foot:
+            return self._draw_on_foot(s, w, h)
+
         camera_surface = pg.Surface((w, h), pg.SRCALPHA)
 
         sx, sy = self.schiff_rect.center
 
-        # ocean
-        tile = int(time() * 2)
-        for i in range(25):
-            for j in range(20):
-                pos = pg.Vector2(64 * i, 64 * j) - (sx % 64, sy%64)
-                camera_surface.blit(self.tiles[(tile + i) % 4], pos)
+        # ocean (dynamisch an Bildschirmgroesse angepasst, deckt alles ab)
+        self._fill_ocean(camera_surface, w, h, sx, sy)
 
         # island (Haupt-Insel)
         insel_pos = pg.Vector2(0, 0) - self.camera_pos + pg.Vector2(w // 2, h // 2)
@@ -3375,7 +4483,10 @@ class PlayState(State):
             shake_y = random.uniform(-self.screen_shake_intensity, self.screen_shake_intensity)
             zoom_rect.x += int(shake_x)
             zoom_rect.y += int(shake_y)
-        
+
+        # Grundfarbe fuellen, damit Zoom/Screen-Shake keine schwarzen Raender zeigen
+        if hasattr(self, '_ocean_bg_color'):
+            s.fill(self._ocean_bg_color)
         s.blit(scaled, zoom_rect)
         
         # ==================== PREMIUM UI ====================
@@ -3444,9 +4555,9 @@ class PlayState(State):
         s.blit(level_badge, (bar_x + bar_width + 10, exp_bar_y - 3))
         
         # Stats Panel oben links
-        stats_panel = pg.Surface((160, 100), pg.SRCALPHA)
-        pg.draw.rect(stats_panel, (0, 0, 0, 150), (0, 0, 160, 100), border_radius=8)
-        pg.draw.rect(stats_panel, (100, 100, 100, 200), (0, 0, 160, 100), width=2, border_radius=8)
+        stats_panel = pg.Surface((160, 128), pg.SRCALPHA)
+        pg.draw.rect(stats_panel, (0, 0, 0, 150), (0, 0, 160, 128), border_radius=8)
+        pg.draw.rect(stats_panel, (100, 100, 100, 200), (0, 0, 160, 128), width=2, border_radius=8)
         s.blit(stats_panel, (10, 10))
         
         # Kill-Counter mit Icon
@@ -3465,17 +4576,20 @@ class PlayState(State):
         pg.draw.circle(s, (255, 255, 255), (27, 57), 3)
         gem_text = self.font_main.render(f"{self.total_gems}", True, gem_color)
         s.blit(gem_text, (50, 52))
-        
-        # Survival-Zeit und Schwierigkeit
+
+        # Muenzen-Counter mit Icon (Pro-Run-Waehrung)
+        coin_color = (230, 180, 60)
+        pg.draw.circle(s, coin_color, (30, 87), 9)
+        pg.draw.circle(s, (255, 235, 150), (30, 87), 9, 2)
+        pg.draw.circle(s, (255, 245, 200), (27, 84), 2)
+        coin_text = self.font_main.render(f"{self.coins}", True, (255, 220, 120))
+        s.blit(coin_text, (50, 78))
+
+        # Survival-Zeit
         survival_minutes = int(self.survival_time // 60)
         survival_seconds = int(self.survival_time % 60)
-        difficulty = self.get_difficulty()
         time_text = self.font_small.render(f"{survival_minutes}:{survival_seconds:02d}", True, (200, 200, 255))
-        s.blit(time_text, (50, 82))
-        # Schwierigkeits-Indikator (Farbe je nach Level)
-        diff_color = (100 + min(155, int(difficulty * 30)), max(0, 255 - int(difficulty * 40)), 100)
-        diff_text = self.font_small.render(f"x{difficulty:.1f}", True, diff_color)
-        s.blit(diff_text, (100, 82))
+        s.blit(time_text, (50, 106))
 
         # Aktive Piratenklasse
         pirate_name = getattr(self, 'selected_pirate_name', 'Balanced Captain')
@@ -3580,7 +4694,19 @@ class PlayState(State):
             boss_hp_str = f"{int(active_boss.health)}/{boss_max}"
             boss_hp_text = self.font_small.render(boss_hp_str, True, (255, 255, 255))
             s.blit(boss_hp_text, (boss_bar_x + boss_bar_w // 2 - boss_hp_text.get_width() // 2, boss_bar_y + 18))
-        
+
+        # ==================== ARTEFAKT-HUD (Marker, aktive Artefakte, Popup) ====================
+        self._draw_crate_hud(s, w, h)
+
+        # Hinweis zum Aussteigen, wenn das Schiff an einer Insel liegt
+        if not self.on_foot and self._near_landing():
+            hint = self.font_main.render("[E] An Land gehen", True, (255, 230, 140))
+            hb = pg.Surface((hint.get_width() + 20, hint.get_height() + 10), pg.SRCALPHA)
+            pg.draw.rect(hb, (18, 24, 40, 210), hb.get_rect(), border_radius=8)
+            pg.draw.rect(hb, (120, 200, 255), hb.get_rect(), 2, border_radius=8)
+            hb.blit(hint, (10, 5))
+            s.blit(hb, ((w - hb.get_width()) // 2, h - 70))
+
         # ==================== CREW HUD (oben rechts) ====================
         self.crew.draw_hud(s, w, h)
         
